@@ -8,14 +8,15 @@ from operator import attrgetter
 from typing import Any, Callable, Generator, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
+
 import aioredis
 from aioredis import MultiExecError, Redis
 from pydantic.validators import make_arbitrary_type_validator
 
-from constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, task_key, health_check_key_suffix
-from jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
-from utils import timestamp_ms, to_ms, to_unix_ms
-
+from .constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, task_key, \
+    health_check_key_suffix
+from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('aiorq.connections')
 
@@ -131,7 +132,6 @@ class AioRedis(Redis):  # type: ignore
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
 
-
         with await self as conn:
             pipe = conn.pipeline()
             pipe.unwatch()
@@ -166,6 +166,7 @@ class AioRedis(Redis):  # type: ignore
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
     async def _get_job_result(self, key: str) -> JobResult:
+
         job_id = key[len(result_key_prefix):]
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
@@ -204,7 +205,7 @@ class AioRedis(Redis):  # type: ignore
             workers_.append(v.decode())
         return workers_
 
-    async def _get_health_check(self, worker_name:str = "cp_1@f88cc561-2cc0-49fc-8043-436dadd30d23"):
+    async def _get_health_check(self, worker_name: str):
         v = await self.get(f"{health_check_key_suffix}{worker_name}", encoding=None)
         return v
 

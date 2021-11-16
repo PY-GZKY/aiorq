@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 from aioredis import MultiExecError
 from pydantic.utils import import_string
 
-from connections import AioRedis, RedisSettings, create_pool, log_redis_info
-from constants import (
+from .connections import AioRedis, RedisSettings, create_pool, log_redis_info
+from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
     default_queue_name,
@@ -28,13 +28,13 @@ from constants import (
     task_key, worker_key_close_expire, default_worker_name
 
 )
-from cron import CronJob
-from jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
-from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, as_int, \
+from .cron import CronJob
+from .jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
+from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, as_int, \
     get_user_name, gen_uuid
 
 if TYPE_CHECKING:
-    from typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from .typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('aiorq.worker')
 no_result = object()
@@ -578,7 +578,7 @@ class Worker:
         success = False
         try:
             s = args_to_string(args, kwargs)
-            extra = f' try={job_try}' if job_try > 1 else ''
+            extra = f' job_try={job_try}' if job_try > 1 else ''
             if (start_ms - score) > 1200:
                 extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)

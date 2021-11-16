@@ -8,7 +8,7 @@ readme = Path(__file__).parent / 'README.md'
 if readme.exists():
     long_description = readme.read_text()
 else:
-    long_description = description + '.\n\nSee https://aiorq-docs.helpmanual.io/ for documentation.'
+    long_description = description + '.\n\nSee https://readthedocs.org/projects/aiorq-docs for documentation.'
 # avoid loading the package before requirements are installed:
 version = SourceFileLoader('version', 'aiorq/version.py').load_module()
 
@@ -57,7 +57,7 @@ setup(
         'aioredis>=1.1.0,<2.0.0',
         'click>=6.7',
         'pydantic>=1',
-        'dataclasses>=0.6;python_version == "3.7"',
+        'dataclasses>=0.6;python_version == "3.8"',
         'typing-extensions>=3.7;python_version < "3.8"'
     ],
     extras_require={

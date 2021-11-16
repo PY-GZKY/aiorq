@@ -7,12 +7,12 @@ from pydantic.utils import import_string
 from signal import Signals
 from typing import TYPE_CHECKING, cast
 
-from logs import default_log_config
-from version import VERSION
-from worker import check_health, create_worker, run_worker
+from .logs import default_log_config
+from .version import VERSION
+from .worker import check_health, create_worker, run_worker
 
 if TYPE_CHECKING:
-    from aiorq.typing_ import WorkerSettingsType
+    from .typing_ import WorkerSettingsType
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit.'
@@ -30,7 +30,6 @@ verbose_help = 'Enable verbose output.'
 def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool) -> None:
     """
     Job queues in python with asyncio and redis.
-
     CLI to run the aiorq worker.
     """
     sys.path.append(os.getcwd())
@@ -72,5 +71,5 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
     finally:
         await worker.close()
 
-if __name__ == '__main__':
-    cli()
+# if __name__ == '__main__':
+#     cli()

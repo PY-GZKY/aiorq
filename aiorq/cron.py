@@ -6,8 +6,8 @@ from typing import Optional, Union
 
 from pydantic.utils import import_string
 
-from typing_ import WEEKDAYS, OptionType, SecondsTimedelta, WeekdayOptionType, WorkerCoroutine
-from utils import to_seconds
+from .typing_ import WEEKDAYS, OptionType, SecondsTimedelta, WeekdayOptionType, WorkerCoroutine
+from .utils import to_seconds
 
 
 @dataclass

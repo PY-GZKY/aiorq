@@ -23,14 +23,14 @@ async def startup() -> None:
 
 
 @app.get("/get_health_check")
-async def get_health_check(request: Request, worker_name="cp_1@f88cc561-2cc0-49fc-8043-436dadd30d23"):
+async def get_health_check(request: Request, worker_name):
     result = await request.app.state.redis._get_health_check(worker_name=worker_name)
     return {"result": json.loads(result)}
 
 
 @app.get("/test")
 async def t_(request: Request):
-    job = await request.app.state.redis.enqueue_job('say_hello', name="wt", _queue_name="aiorq:queue1")
+    job = await request.app.state.redis.enqueue_job('say_hello', name="wt", _queue_name="aiorq:queue2",_job_try=4)
     job_ = await job.info()
     return {"job_": job_}
 
@@ -62,23 +62,8 @@ async def get_all_task(request: Request):
 
 
 @app.get("/get_all_result")
-async def get_all_result(request: Request, queue_name="aiorq:queue", worker=None, task=None, job_id=None):
-    queued_jobs_ = await request.app.state.redis.queued_jobs(queue_name=queue_name)
-    queued_jobs__ = []
-    for queued_job_ in queued_jobs_:
-        state = await Job(job_id=queued_job_.__dict__.get("job_id"), redis=request.app.state.redis,
-                          _queue_name=queue_name).status()
-        queued_job_.__dict__.update({"state": state})
-        print(queued_job_.__dict__)
-        queued_jobs__.append(queued_job_.__dict__)
-
-    results = await request.app.state.redis.all_job_results()
-    results_ = []
-    for result in results:
-        result.__dict__.update({"state": "complete"})
-        results_.append(result.__dict__)
-
-    all_result_ = results_ + queued_jobs__
+async def get_all_result(request: Request, worker=None, task=None, job_id=None):
+    all_result_ = await request.app.state.redis.all_job_results()
     if worker:
         all_result_ = [result_ for result_ in all_result_ if result_.get("worker_name") == worker]
     if task:
@@ -88,8 +73,6 @@ async def get_all_result(request: Request, queue_name="aiorq:queue", worker=None
 
     return {"results_": all_result_}
 
-
-# 已正在执行队列 + 待执行队列
 @app.get("/queued_jobs")
 async def queued_jobs(request: Request, queue_name="aiorq:queue"):
     queued_jobs_ = await request.app.state.redis.queued_jobs(queue_name=queue_name)
@@ -111,5 +94,4 @@ async def job_status(request: Request, job_id="12673208ee3b417192b7cce06844adda"
 
 if __name__ == '__main__':
     import uvicorn
-
-    uvicorn.run(app='main:app', host="0.0.0.0", port=9990, reload=True)
+    uvicorn.run(app='main:app', host="0.0.0.0", port=9999, reload=True)
