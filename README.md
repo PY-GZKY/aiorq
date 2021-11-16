@@ -1,4 +1,4 @@
-<h1 align="center">Aiorq 👋</h1>
+<h1 align="center">👽 Aiorq </h1>
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.7 | 3.8 | 3.9-blue" />
   <img src="https://img.shields.io/badge/license-MIT-green" />
