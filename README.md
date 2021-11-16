@@ -33,8 +33,8 @@ pip install aioredis
 import asyncio
 import os
 
-from connections import RedisSettings
-from cron import cron
+from aiorq.connections import RedisSettings
+from aiorq.cron import cron
 
 
 async def say_hello(ctx, name) -> None:
@@ -104,8 +104,8 @@ import os
 from fastapi import FastAPI
 from starlette.requests import Request
 
-from connections import RedisSettings, create_pool
-from jobs import Job
+from aiorq.connections import RedisSettings, create_pool
+from aiorq.jobs import Job
 
 app = FastAPI()
 
@@ -196,9 +196,7 @@ async def job_status(request: Request, job_id="12673208ee3b417192b7cce06844adda"
 
 if __name__ == '__main__':
     import uvicorn
-
     uvicorn.run(app='main:app', host="0.0.0.0", port=9999, reload=True)
-
 ```
 
 ## Thanks
