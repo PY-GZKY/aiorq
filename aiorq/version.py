@@ -1,3 +1,2 @@
-__all__ = ('VERSION',)
-
-VERSION = '0.29'
+__all__ = ('__version__',)
+__version__ = '0.30'

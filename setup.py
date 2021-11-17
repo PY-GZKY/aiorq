@@ -14,7 +14,7 @@ version = SourceFileLoader('version', 'aiorq/version.py').load_module()
 
 setup(
     name='aiorq',
-    version=version.VERSION,
+    version=version.__version__,
     description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',
