@@ -8,7 +8,7 @@ from signal import Signals
 from typing import TYPE_CHECKING, cast
 
 from .logs import default_log_config
-from .version import VERSION
+from .version import __version__
 from .worker import check_health, create_worker, run_worker
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ verbose_help = 'Enable verbose output.'
 
 
 @click.command('aiorq')
-@click.version_option(VERSION, '-V', '--version', prog_name='aiorq')
+@click.version_option(__version__, '-V', '--version', prog_name='aiorq')
 @click.argument('worker-settings', type=str, required=True)
 @click.option('--burst/--no-burst', default=None, help=burst_help)
 @click.option('--check', is_flag=True, help=health_check_help)
@@ -71,5 +71,5 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
     finally:
         await worker.close()
 
-# if __name__ == '__main__':
-#     cli()
+if __name__ == '__main__':
+    cli()
