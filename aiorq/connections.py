@@ -5,7 +5,7 @@ import ssl
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, Callable, Generator, List, Optional, Tuple, Union
+from typing import Any, Callable, Generator, List, Optional, Tuple, Union, Dict
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -183,18 +183,14 @@ class AioRedis(Redis):  # type: ignore
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
         return sorted(results, key=attrgetter('enqueue_time'))
 
-    async def all_tasks(self):
+    async def all_tasks(self) -> List[Dict]:
         """
         Get results for all tasks in redis.
         """
-        keys = await self.keys(task_key + '*')
-        tasks_ = []
-        for key_ in keys:
-            v = await self.get(key_, encoding=None)
-            tasks_.append(v.decode())
-        return tasks_
+        v = await self.get(task_key, encoding=None)
+        return v.decode()
 
-    async def all_workers(self):
+    async def all_workers(self) -> List[Dict]:
         """
         Get results for all workers in redis.
         """
@@ -205,7 +201,7 @@ class AioRedis(Redis):  # type: ignore
             workers_.append(v.decode())
         return workers_
 
-    async def _get_health_check(self, worker_name: str):
+    async def _get_health_check(self, worker_name: str) -> Dict:
         v = await self.get(f"{health_check_key_suffix}{worker_name}", encoding=None)
         return v
 

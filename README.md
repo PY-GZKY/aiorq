@@ -111,7 +111,6 @@ from aiorq.jobs import Job
 
 app = FastAPI()
 
-
 @app.on_event("startup")
 async def startup() -> None:
     app.state.redis = await create_pool(
@@ -130,9 +129,9 @@ async def get_health_check(request: Request, worker_name):
     return {"result": json.loads(result)}
 
 
-@app.get("/test")
-async def t_(request: Request):
-    job = await request.app.state.redis.enqueue_job('say_hello', name="wt", _queue_name="aiorq:queue", _job_try=5)
+@app.get("/enqueue_job_")
+async def enqueue_job_(request: Request):
+    job = await request.app.state.redis.enqueue_job('say_hello', name="wt", _queue_name="aiorq:queue",_job_try=4)
     job_ = await job.info()
     return {"job_": job_}
 
@@ -145,21 +144,20 @@ async def index(request: Request, queue_name="aiorq:queue"):
     functions_num = len(list(functions))
     workers_num = len(list(workers))
     results_num = len(results)
-    results = {"functions_num": functions_num, "workers_num": workers_num, "results_num": results_num, }
+    results = {"functions_num": functions_num, "workers_num": workers_num, "results_num": results_num}
     return {"results": results}
 
 
 @app.get("/get_all_workers")
-async def get_all_workers(request: Request, queue_name="aiorq:queue"):
+async def get_all_workers(request: Request):
     results = await request.app.state.redis.all_workers()
     results = [json.loads(v) for v in results]
     return {"results": results}
 
 
-@app.get("/get_all_task")
-async def get_all_task(request: Request):
-    functions = await request.app.state.redis.all_tasks()
-    results = [json.loads(v) for v in functions]
+@app.get("/get_all_functions")
+async def get_all_functions(request: Request):
+    results = await request.app.state.redis.all_tasks()
     return {"results": results}
 
 
@@ -175,8 +173,6 @@ async def get_all_result(request: Request, worker=None, task=None, job_id=None):
 
     return {"results_": all_result_}
 
-
-# job queued_jobs
 @app.get("/queued_jobs")
 async def queued_jobs(request: Request, queue_name="aiorq:queue"):
     queued_jobs_ = await request.app.state.redis.queued_jobs(queue_name=queue_name)

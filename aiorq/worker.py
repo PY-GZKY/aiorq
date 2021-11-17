@@ -260,6 +260,7 @@ class Worker:
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
 
+
     async def _set_worker(self, _pool, worker_name, ):
         value = {
             "is_action": 1,
@@ -270,6 +271,7 @@ class Worker:
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value))
 
     async def _set_functions(self, _pool):
+        functions_ = []
         for f_ in self.functions.values():
             if isinstance(f_, CronJob):
                 is_timer = 1
@@ -301,7 +303,9 @@ class Worker:
                     "coroutine": f_.coroutine.__qualname__,
                     "time_": str(ms_to_datetime(as_int(time() * 1000)))
                 }
-            await _pool.set(f'{task_key}:{f_.name}', json.dumps(function_))
+
+            functions_.append(function_)
+        await _pool.set(f'{task_key}', json.dumps(functions_))
 
     def run(self) -> None:
         """
