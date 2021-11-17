@@ -14,6 +14,7 @@ from aioredis import MultiExecError
 from pydantic.utils import import_string
 
 from .connections import AioRedis, RedisSettings, create_pool, log_redis_info
+from .version import __version__
 from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
@@ -361,6 +362,7 @@ class Worker:
         await self._set_worker(_pool=self._pool, worker_name=self.worker_name)
         await self._set_functions(_pool=self._pool)
 
+        logger.info(f'Aiorq Version: {__version__}')
         logger.info(f'Starting Queue: {self.queue_name}')
         logger.info(f'Starting Worker: {self.worker_name}')
         logger.info(f'Starting Functions: {", ".join(self.functions)}')
