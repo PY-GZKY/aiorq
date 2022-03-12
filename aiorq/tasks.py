@@ -43,11 +43,7 @@ class WorkerSettings:
 
     on_shutdown = shutdown
 
-    cron_jobs = [
-        cron(coroutine=run_cron, name="x100", minute=40, second=50, keep_result_forever=True)
-    ]
-
     allow_abort_jobs = True
 
-    worker_name = "cp_1"
+    worker_name = None
     # queue_name = "aiorq:queue1"

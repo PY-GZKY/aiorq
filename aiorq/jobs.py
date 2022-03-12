@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from aioredis import Redis
 
-from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
-from .utils import ms_to_datetime, poll, timestamp_ms
+from aiorq.constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from aiorq.utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('aiorq.jobs')
 
@@ -44,6 +44,7 @@ class JobDef:
     enqueue_time: datetime
     queue_name: str
     score: Optional[int]
+
 
 
 @dataclass
@@ -81,12 +82,14 @@ class Job:
         self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: float = None
     ) -> Any:
         """
-        Get the result of the job, including waiting if it's not yet available. If the job raised an exception,
-        it will be raised here.
+        获取作业的结果，包括在尚未可用时等待。如果工作引发了一个例外，
+        它将在这里提出。
+        ：param timeout：在引发“TimeoutError”之前等待作业结果的最长时间将永远等待
+        ：param poll_delay：为作业结果轮询redis的频率
+        ：param pole_delay:已弃用，请改用poll_delay
 
-        :param timeout: maximum time to wait for the job result before raising ``TimeoutError``, will wait forever
-        :param poll_delay: how often to poll redis for the job result
-        :param pole_delay: deprecated, use poll_delay instead
+        这里一直等待任务完成并返回结果
+        否则一直阻塞
         """
         if pole_delay is not None:
             warnings.warn(
@@ -110,9 +113,11 @@ class Job:
     async def info(self) -> Optional[JobDef]:
         """
 
-        All information on a job, including its result if it's available, does not wait for the result.
+        作业的所有信息，包括其结果（如果可用），都不会等待结果
+        这里如果获取不到 result info 就会去获取 job info
         """
         info: Optional[JobDef] = await self.result_info()
+        # 这里如果获取不到就会去获取 job info
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
@@ -120,13 +125,14 @@ class Job:
                 info = deserialize_job(v, deserializer=self._deserializer)
 
         if info:
+            # 获取到了就把 score 值附上去并返回
             info.score = await self._redis.zscore(self._queue_name, self.job_id)
         return info
 
     async def result_info(self) -> Optional[JobResult]:
         """
-        Information about the job result if available, does not wait for the result. Does not raise an exception
-        even if the job raised one.
+        有关作业结果的信息（如果可用）不会等待结果。不会引发异常 即使这份工作养了一只。
+        这里会立即返回结果  如果还没有结果 那就返回 None
         """
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
@@ -137,30 +143,36 @@ class Job:
 
     async def status(self) -> JobStatus:
         """
-        Status of the job.
+        工作的状态方法
         """
+        # 如果 result_key_prefix 键存在 说明可以返回结果 complete
         if await self._redis.exists(result_key_prefix + self.job_id):
             return JobStatus.complete
+        # 如果 in_progress_key_prefix 键存在 说明正在进行中 in_progress
         elif await self._redis.exists(in_progress_key_prefix + self.job_id):
             return JobStatus.in_progress
         else:
+            # 任务不见了
             score = await self._redis.zscore(self._queue_name, self.job_id)
             if not score:
                 return JobStatus.not_found
+            # 任务超时 或者 还没有被执行
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
 
     async def abort(self, *, timeout: Optional[float] = None, poll_delay: float = 0.5) -> bool:
         """
-        Abort the job.
+        工作终止方法
 
-        :param timeout: maximum time to wait for the job result before raising ``TimeoutError``,
-            will wait forever on None
-        :param poll_delay: how often to poll redis for the job result
-        :return: True if the job aborted properly, False otherwise
+        ：param timeout：在引发“TimeoutError”之前等待作业结果的最长时间，不会永远等待任何人
+        ：param poll_delay：为作业结果轮询redis的频率
+        ：return：如果作业正确中止，则为True，否则为False
         """
+        # 设置 redis 为终止键
         await self._redis.zadd(abort_jobs_ss, timestamp_ms(), self.job_id)
         try:
+            # 尝试获取结果
             await self.result(timeout=timeout, poll_delay=poll_delay)
+        # 如果抛出取消的异常 则终止成功  否则终止失败
         except asyncio.CancelledError:
             return True
         else:

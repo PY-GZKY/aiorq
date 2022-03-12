@@ -13,17 +13,18 @@ import aioredis
 from aioredis import MultiExecError, Redis
 from pydantic.validators import make_arbitrary_type_validator
 
-from .constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, task_key, \
+from aiorq.constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
+    task_key, \
     health_check_key_suffix
-from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
-from .utils import timestamp_ms, to_ms, to_unix_ms
+from aiorq.jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from aiorq.utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('aiorq.connections')
 
 
 class SSLContext(ssl.SSLContext):
     """
-    Required to avoid problems with
+    是否 ssl
     """
 
     @classmethod
@@ -73,13 +74,12 @@ expires_extra_ms = 86_400_000
 
 class AioRedis(Redis):  # type: ignore
     """
-    Thin subclass of ``aioredis.Redis`` which adds :func:`aiorq.connections.enqueue_job`.
-
-    :param redis_settings: an instance of ``aiorq.connections.RedisSettings``.
-    :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
-    :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
-    :param default_queue_name: the default queue name to use, defaults to ``aiorq.queue``.
-    :param kwargs: keyword arguments directly passed to ``aioredis.Redis``.
+    “`aioredis”的一个小类。Redis``增加了：func:`aiorq。连接。排队等待工作`。
+    ：param redis_settings:“`aiorq”的一个实例。连接。重新定义设置``。
+    ：param job_serializer：将Python对象序列化为字节的函数，默认为pickle。倾倒
+    ：param job_反序列化器：将字节反序列化为Python对象的函数，默认为pickle。荷载
+    ：param default_queue_name：要使用的默认队列名称，默认为``aiorq。排队``。
+    ：param kwargs：直接传递给``aioredis的关键字参数。Redis``。
     """
 
     def __init__(
@@ -97,6 +97,7 @@ class AioRedis(Redis):  # type: ignore
         self.default_worker_name = default_worker_name
         super().__init__(pool_or_conn, **kwargs)
 
+    # 任务加入 redis 队列
     async def enqueue_job(
             self,
             function: str,
@@ -112,17 +113,18 @@ class AioRedis(Redis):  # type: ignore
         """
         Enqueue a job.
 
-        :param function: Name of the function to call
-        :param args: args to pass to the function
-        :param _job_id: ID of the job, can be used to enforce job uniqueness
-        :param _queue_name: queue of the job, can be used to create job in different queue
-        :param _defer_until: datetime at which to run the job
-        :param _defer_by: duration to wait before running the job
-        :param _expires: if the job still hasn't started after this duration, do not run it
-        :param _job_try: useful when re-enqueueing jobs within a job
-        :param kwargs: any keyword arguments to pass to the function
-        :return: :class:`aiorq.jobs.Job` instance or ``None`` if a job with this ID already exists
+        ：param function:要调用的函数的名称
+        ：param args：传递给函数的参数
+        ：param _job_id：作业的id，可用于强制作业唯一性
+        ：param _queue_name：作业的队列，可用于在不同队列中创建作业
+        ：param _defer_直到：运行作业的日期时间
+        ：param _defer_by:运行作业前等待的持续时间
+        ：param _expires：如果作业在此持续时间之后仍未启动，请不要运行它
+        ：param _job_try：在作业中重新排队作业时非常有用
+        ：param kwargs：传递给函数的任何关键字参数
+        ：return：：class:`aiorq。乔布斯。Job`instance或`None``如果具有此ID的作业已存在
         """
+        # 如果 队列名称为 空使用默认名称
         if _queue_name is None:
             _queue_name = self.default_queue_name
         job_id = _job_id or uuid4().hex
@@ -132,12 +134,16 @@ class AioRedis(Redis):  # type: ignore
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
 
+        # self 代表类 redis 链接类
         with await self as conn:
+            # aioredis 管道
             pipe = conn.pipeline()
             pipe.unwatch()
             pipe.watch(job_key)
+            # 是否存在该键
             job_exists = pipe.exists(job_key)
             job_result_exists = pipe.exists(result_key_prefix + job_id)
+            # 执行器
             await pipe.execute()
             if await job_exists or await job_result_exists:
                 return None
@@ -154,7 +160,11 @@ class AioRedis(Redis):  # type: ignore
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, _queue_name,
                                 serializer=self.job_serializer)
+
+            # redis 批处理执行
             tr = conn.multi_exec()
+
+            # 添加任务id到 redis 队列
             tr.psetex(job_key, expires_ms, job)
             tr.zadd(_queue_name, score, job_id)
             try:
@@ -165,19 +175,21 @@ class AioRedis(Redis):  # type: ignore
                 return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
+    # 根据 key 获取工作结果
     async def _get_job_result(self, key: str) -> JobResult:
-
+        # 获取组合键的后半部分
         job_id = key[len(result_key_prefix):]
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
         if r is None:
             raise KeyError(f'job "{key}" not found')
+        # 附上 job_id
         r.job_id = job_id
         return r
 
     async def all_job_results(self) -> List[JobResult]:
         """
-        Get results for all jobs in redis.
+        获取所有工作结果
         """
         keys = await self.keys(result_key_prefix + '*')
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
@@ -185,14 +197,14 @@ class AioRedis(Redis):  # type: ignore
 
     async def all_tasks(self) -> List[Dict]:
         """
-        Get results for all tasks in redis.
+        获取所有任务方法
         """
         v = await self.get(task_key, encoding=None)
         return v.decode()
 
     async def all_workers(self) -> List[Dict]:
         """
-        Get results for all workers in redis.
+        获取所有工作者
         """
         keys = await self.keys(worker_key + '*')
         workers_ = []
@@ -201,6 +213,7 @@ class AioRedis(Redis):  # type: ignore
             workers_.append(v.decode())
         return workers_
 
+    # 获取健康检查结果
     async def _get_health_check(self, worker_name: str) -> Dict:
         v = await self.get(f"{health_check_key_suffix}{worker_name}", encoding=None)
         return v
@@ -212,6 +225,7 @@ class AioRedis(Redis):  # type: ignore
         jd.job_id = job_id
         return jd
 
+    # 获取正在等待队列中的任务
     async def queued_jobs(self, *, queue_name: str = default_queue_name) -> List[JobDef]:
         """
         Get information about queued, mostly useful when testing.
@@ -220,6 +234,7 @@ class AioRedis(Redis):  # type: ignore
         return await asyncio.gather(*[self._get_job_def(job_id, score) for job_id, score in jobs])
 
 
+# 创建 redis 连接池 返回 AioRedis
 async def create_pool(
         settings_: RedisSettings = None,
         *,
@@ -229,10 +244,9 @@ async def create_pool(
         default_queue_name: str = default_queue_name,
 ) -> AioRedis:
     """
-    Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
-
-    Similar to ``aioredis.create_redis_pool`` except it returns a :class:`aiorq.connections.AioRedis` instance,
-    thus allowing job enqueuing.
+    创建一个新的redis池，如果连接失败，最多重试“conn_retries”次。
+    类似于“aioredis”。创建_redis_pool``除非它返回一个：class:`aiorq。连接。
+    从而允许工作排队。
     """
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
@@ -254,6 +268,7 @@ async def create_pool(
         addr = settings.host, settings.port
 
     try:
+        # 创建 redis 池
         pool = await pool_factory(addr, db=settings.database, password=settings.password, encoding='utf8')
         pool = AioRedis(
             pool,
@@ -279,8 +294,7 @@ async def create_pool(
             logger.info('redis connection successful')
         return pool
 
-    # recursively attempt to create the pool outside the except block to avoid
-    # "During handling of the above exception..." madness
+    # 递归地尝试在except块之外创建池以避免“在处理上述异常时……”疯狂
     return await create_pool(
         settings,
         retry=retry + 1,
@@ -289,9 +303,10 @@ async def create_pool(
         default_queue_name=default_queue_name,
     )
 
-
+# 日志方法
 async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:
     with await redis as r:
+        # 获取 redis 服务 内存 客户端 键的个数 数据库大小
         info_server, info_memory, info_clients, key_count = await asyncio.gather(
             r.info(section='Server'), r.info(section='Memory'), r.info(section='Clients'), r.dbsize(),
         )

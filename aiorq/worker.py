@@ -85,12 +85,11 @@ def func(
 
     return Function(name or coroutine_.__qualname__, coroutine_, timeout, keep_result, keep_result_forever, max_tries)
 
-
+# 重试类 派生于 RuntimeError
 class Retry(RuntimeError):
     """
-    Special exception to retry the job (if ``max_retries`` hasn't been reached).
-
-    :param defer: duration to wait before rerunning the job
+    重试作业的特殊异常（如果尚未达到“最大重试次数”）。
+    ：param defer：重新运行作业之前等待的持续时间
     """
 
     def __init__(self, defer: Optional['SecondsTimedelta'] = None):
@@ -103,6 +102,7 @@ class Retry(RuntimeError):
         return repr(self)
 
 
+# 工作失败异常类
 class JobExecutionFailed(RuntimeError):
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, JobExecutionFailed):
@@ -132,36 +132,32 @@ class RetryJob(RuntimeError):
 
 class Worker:
     """
-    Main class for running jobs.
+    运行作业的主类。
 
-    :param functions: list of functions to register, can either be raw coroutine functions or the
-      result of :func:`aiorq.worker.func`.
-    :worker_name ...
-    :param queue_name: queue name to get jobs from
-    :param cron_jobs:  list of cron jobs to run, use :func:`aiorq.cron.cron` to create them
-    :param redis_settings: settings for creating a redis connection
-    :param redis_pool: existing redis pool, generally None
-    :param burst: whether to stop the worker once all jobs have been run
-    :param on_startup: coroutine function to run at startup
-    :param on_shutdown: coroutine function to run at shutdown
-    :param handle_signals: default true, register signal handlers,
-      set to false when running inside other async framework
-    :param max_jobs: maximum number of jobs to run at a time
-    :param job_timeout: default job timeout (max run time)
-    :param keep_result: default duration to keep job results for
-    :param keep_result_forever: whether to keep results forever
-    :param poll_delay: duration between polling the queue for new jobs
-    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it
-                             equals ``max_jobs``
-    :param max_tries: default maximum number of times to retry a job
-    :param health_check_interval: how often to set the health check key
-    :param health_check_key: redis key under which health check is set
-    :param ctx: dictionary to hold extra user defined state
-    :param retry_jobs: whether to retry jobs on Retry or CancelledError or not
-    :param allow_abort_jobs: whether to abort jobs on a call to :func:`aiorq.jobs.Job.abort`
-    :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
-    :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
-    :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    ：param functions：要注册的函数列表，可以是原始协同例程函数，也可以是结果：func:`aiorq。工人func`。
+    ：param queue_name：从中获取作业的队列名称
+    ：param cron_jobs:要运行的cron jobs列表，使用：func:`aiorq。克朗。cron`创建它们
+    ：param redis_settings：用于创建redis连接的设置
+    ：param redis_pool：现有redis pool，通常无
+    ：param burst：所有作业运行后是否停止工作进程
+    ：param on_startup:coroutine函数在启动时运行
+    ：param on_shutdown：关闭时运行的协同程序功能
+    ：param handle_signals：默认为true，寄存器信号处理程序，在其他异步框架内运行时设置为false
+    ：param max_jobs：一次运行的最大作业数
+    ：param job_timeout：默认作业超时（最大运行时间）
+    ：param keep_result：保留作业结果的默认持续时间
+    ：参数永远保存结果：是否永远保存结果
+    ：param poll_delay：轮询队列以获取新作业之间的持续时间
+    ：param queue_read_limit：每次轮询队列时从队列中提取的最大作业数；默认情况下等于“最大工作”``
+    ：param max_trytes:默认重试作业的最大次数
+    ：param health_check_interval:设置健康检查键的频率
+    ：param health_check_key：设置健康检查的redis键
+    ：param ctx:保存额外用户定义状态的字典
+    ：param retry_jobs：是否在重试时重试作业或取消错误
+    ：param allow_abort_jobs:是否在调用：func:`aiorq时中止作业。乔布斯。工作流产`
+    ：param max_burst_jobs：在突发模式下要处理的最大作业数（使用负值禁用）
+    ：param job_serializer：将Python对象序列化为字节的函数，默认为pickle。倾倒
+    ：param job_反序列化器：将字节反序列化为Python对象的函数，默认为pickle。荷载
     """
 
     def __init__(
@@ -210,12 +206,15 @@ class Worker:
         if cron_jobs is not None:
             assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
             self.cron_jobs = list(cron_jobs)
+            # 普通任务 + 定时任务
             self.functions.update({cj.name: cj for cj in self.cron_jobs})
 
+        # 方法列表 > 0
         assert len(self.functions) > 0, 'at least one function or cron_job must be registered'
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
+        # 最大并发 sem
         self.sem = asyncio.BoundedSemaphore(max_jobs)
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
@@ -225,43 +224,58 @@ class Worker:
         self._queue_read_offset = 0
         self.max_tries = max_tries
         self.health_check_interval = to_seconds(health_check_interval)
+
+        # 指定健康检查 key
         if health_check_key is None:
             self.health_check_key = f'{health_check_key_suffix}{self.worker_name}'
         else:
             self.health_check_key = health_check_key
+        # 指定 redis 连接池
         self._pool = redis_pool
+
         if self._pool is None:
             self.redis_settings: Optional[RedisSettings] = redis_settings or RedisSettings()
         else:
             self.redis_settings = None
-        # self.tasks holds references to run_job coroutines currently running
+
+        # self.tasks 保存运行当前正在运行的作业协同路由的引用
         self.tasks: Dict[str, asyncio.Task[Any]] = {}
-        # self.job_tasks holds references the actual jobs running
+        # self.job_tasks 保存实际运行的作业的引用
         self.job_tasks: Dict[str, asyncio.Task[Any]] = {}
         self.main_task: Optional[asyncio.Task[None]] = None
         self.loop = asyncio.get_event_loop()
+
+        # 上下文管理 字典类型
         self.ctx = ctx or {}
         max_timeout = max(f.timeout_s or self.job_timeout_s for f in self.functions.values())
+        # 运行的最大超时时间
         self.in_progress_timeout_s = (max_timeout or 0) + 10
+
+        # 一堆默认状态
         self.jobs_complete = 0
         self.jobs_retried = 0
         self.jobs_failed = 0
         self._last_health_check: float = 0
         self._last_health_check_log: Optional[str] = None
+
+        # 信号
         self._handle_signals = handle_signals
         if self._handle_signals:
             self._add_signal_handler(signal.SIGINT, self.handle_sig)
             self._add_signal_handler(signal.SIGTERM, self.handle_sig)
+
         self.on_stop: Optional[Callable[[Signals], None]] = None
-        # whether or not to retry jobs on Retry and CancelledError
+
+        # 是否在重试和取消时重试作业错误
         self.retry_jobs = retry_jobs
         self.allow_abort_jobs = allow_abort_jobs
         self.aborting_tasks: Set[str] = set()
+
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
 
-
+    # 设置 工作者到 redis
     async def _set_worker(self, _pool, worker_name, ):
         value = {
             "is_action": 1,
@@ -271,6 +285,7 @@ class Worker:
         }
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value))
 
+    # 设置 任务方法到 redis
     async def _set_functions(self, _pool):
         functions_ = []
         for f_ in self.functions.values():
@@ -310,7 +325,8 @@ class Worker:
 
     def run(self) -> None:
         """
-        Sync function to run the worker, finally closes worker connections.
+        同步函数来运行 worker，最后关闭 worker 连接。
+        同步函数里面写着 异步函数 用同步调用
         """
         self.main_task = self.loop.create_task(self.main())
         try:
@@ -346,10 +362,12 @@ class Worker:
         else:
             return self.jobs_complete
 
+    # 没什么作用 方法变属性而已
     @property
     def pool(self) -> AioRedis:
         return cast(AioRedis, self._pool)
 
+    # main 主入口方法
     async def main(self) -> None:
         if self._pool is None:
             self._pool = await create_pool(
@@ -359,19 +377,24 @@ class Worker:
                 default_queue_name=self.queue_name,
             )
 
+        # 设置 redis 值
         await self._set_worker(_pool=self._pool, worker_name=self.worker_name)
         await self._set_functions(_pool=self._pool)
 
+        # 输出一些队列信息
         logger.info(f'Aiorq Version: {__version__}')
         logger.info(f'Starting Queue: {self.queue_name}')
         logger.info(f'Starting Worker: {self.worker_name}')
         logger.info(f'Starting Functions: {", ".join(self.functions)}')
 
         await log_redis_info(self.pool, logger.info)
+        # 将 redis 作为上下文环境
         self.ctx['redis'] = self.pool
+        # 开始的钩子方法
         if self.on_startup:
             await self.on_startup(self.ctx)
 
+        # 工作者开始循环
         async for _ in poll(self.poll_delay_s):  # noqa F841
             await self._poll_iteration(worker_name=self.worker_name)
 
@@ -384,11 +407,13 @@ class Worker:
                     await asyncio.gather(*self.tasks.values())
                     return None
 
+    # 开始执行任务列表
     async def _poll_iteration(self, worker_name) -> None:
         """
-        Get ids of pending jobs from the main queue sorted-set data structure and start those jobs, remove
-        any finished tasks from self.tasks.
+        从主队列排序集数据结构中获取挂起作业的ID，并启动这些作业，然后删除自我完成的任何任务。任务。
         """
+
+        # 获取的最大并发队列任务数
         count = self.queue_read_limit
         if self.burst and self.max_burst_jobs >= 0:
             burst_jobs_remaining = self.max_burst_jobs - self._jobs_started()
@@ -396,30 +421,34 @@ class Worker:
                 return
             count = min(burst_jobs_remaining, count)
 
-        async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
+        async with self.sem:  # 在我们有“空间”运行作业之前，不要 zrangebyscore
             now = timestamp_ms()
+            # 获取一组 job_ids
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, offset=self._queue_read_offset, count=count, max=now
             )
 
+        # 任务开始工作 根据 job_ids
         await self.start_jobs(job_ids, worker_name)
 
-        # If interruptions are allowed
+        # 如果允许中断
         if self.allow_abort_jobs:
             await self._cancel_aborted_jobs()
 
-        # Reclaim completed tasks and wait for results to be returned
+        # 收回已完成的任务并等待结果返回
+        # t 是 asyncio task 可回调
         for job_id, t in list(self.tasks.items()):
             if t.done():
                 del self.tasks[job_id]
-                # required to make sure errors in run_job get propagated
+                # 需要确保运行_作业中的错误得到传播
                 t.result()
-        # Regular health check
+        # 定期健康检查
         await self.heart_beat()
 
+    # 查“中止作业”排序集中的作业ID，然后取消这些任务。
     async def _cancel_aborted_jobs(self) -> None:
         """
-        Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
+        检查“中止作业”排序集中的作业ID，然后取消这些任务。
         """
         with await self.pool as conn:
             abort_job_ids, _ = await asyncio.gather(
@@ -441,12 +470,15 @@ class Worker:
             self.aborting_tasks.update(aborted)
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
+    # 开始执行普通任务
     async def start_jobs(self, job_ids: List[str], worke_namer: str) -> None:
         """
-        For each job id, get the job definition, check it's not running and start it in a task
+        对于每个作业id，获取作业定义，检查它是否未运行，并在任务中启动它
         """
         for job_id in job_ids:
+            # 获取一个 锁 这里为什么要这么设计呢
             await self.sem.acquire()
+            # 产生正在运行的 in_progress_key_prefix
             in_progress_key = in_progress_key_prefix + job_id
             with await self.pool as conn:
                 pipe = conn.pipeline()
@@ -456,7 +488,7 @@ class Worker:
                 pipe.zscore(self.queue_name, job_id)
                 _, _, ongoing_exists, score = await pipe.execute()
                 if ongoing_exists or not score:
-                    # job already started elsewhere, or already finished and removed from queue
+                    # 作业已在其他位置开始，或已完成并从队列中移除
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
@@ -471,10 +503,13 @@ class Worker:
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
                     await asyncio.gather(*tr._results, return_exceptions=True)
                 else:
+                    # 调用创建 任务 并执行任务
                     t = self.loop.create_task(self.run_job(job_id, score, worke_namer))
+                    # 回调方法 释放锁
                     t.add_done_callback(lambda _: self.sem.release())
                     self.tasks[job_id] = t
 
+    # 运行工作任务
     async def run_job(self, job_id: str, score: int, worker_name: str) -> None:  # noqa: C901
         start_ms = timestamp_ms()
         coros = (
@@ -482,6 +517,7 @@ class Worker:
             self.pool.incr(retry_key_prefix + job_id),
             self.pool.expire(retry_key_prefix + job_id, 88400),
         )
+        # 如果允许中断 拿到 abort_job
         if self.allow_abort_jobs:
             abort_job, v, job_try, _ = await asyncio.gather(self.pool.zrem(abort_jobs_ss, job_id), *coros)
         else:
@@ -492,6 +528,7 @@ class Worker:
         args: Tuple[Any, ...] = ()
         kwargs: Dict[Any, Any] = {}
 
+        # 任务失败时
         async def job_failed(exc: BaseException) -> None:
             self.jobs_failed += 1
             result_data_ = serialize_result(
@@ -511,6 +548,7 @@ class Worker:
             )
             await asyncio.shield(self.finish_failed_job(job_id, result_data_))
 
+        # 任务id 失效
         if not v:
             logger.warning('job %s expired', job_id)
             return await job_failed(JobExecutionFailed('job expired'))
@@ -523,30 +561,38 @@ class Worker:
             logger.exception('deserializing job %s failed', job_id)
             return await job_failed(e)
 
+        # 如果中断
         if abort_job:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.info('%6.2fs ⊘ %s:%s aborted before start', t, job_id, function_name)
             return await job_failed(asyncio.CancelledError())
 
         try:
+            # 获取方法 类型为 Function, CronJob
             function: Union[Function, CronJob] = self.functions[function_name]
         except KeyError:
+            # 不存在
             logger.warning('job %s, function %r not found', job_id, function_name)
             return await job_failed(JobExecutionFailed(f'function {function_name!r} not found'))
 
+        # 方法中是否包含属性 next_run 有就是定时任务
         if hasattr(function, 'next_run'):
-            # cron_job
+            # 定时任务 需要 keep_in_progress
             ref = function_name
             keep_in_progress: Optional[float] = keep_cronjob_progress
         else:
+            # 非定时任务 keep_in_progress 为 None
             ref = f'{job_id}:{function_name}'
             keep_in_progress = None
 
+        # 限定工作重试次数 并产生 retry_key_prefix
         if enqueue_job_try and enqueue_job_try > job_try:
             job_try = enqueue_job_try
             await self.pool.setex(retry_key_prefix + job_id, 88400, str(job_try))
 
+        # 最大重试次数
         max_tries = self.max_tries if function.max_tries is None else function.max_tries
+        # 工作重试次数大于方法重试次数 立即返回执行失败
         if job_try > max_tries:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.warning('%6.2fs ! %s max retries %d exceeded', t, ref, max_tries)
@@ -579,6 +625,7 @@ class Worker:
             'enqueue_time': ms_to_datetime(enqueue_time_ms),
             'score': score,
         }
+        # 合并上小文
         ctx = {**self.ctx, **job_ctx}
         start_ms = timestamp_ms()
         success = False
@@ -590,6 +637,7 @@ class Worker:
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
             self.job_tasks[job_id] = task = self.loop.create_task(function.coroutine(ctx, *args, **kwargs))
 
+            # 如果超过预定的超时时间做 取消处理
             cancel_handler = self.loop.call_at(self.loop.time() + timeout_s, task.cancel)
             # run repr(result) and extra inside try/except as they can raise exceptions
             try:
@@ -666,6 +714,7 @@ class Worker:
             )
         )
 
+    # 正常完成工作任务
     async def finish_job(
             self,
             job_id: str,
@@ -699,6 +748,7 @@ class Worker:
             tr.delete(*delete_keys)
             await tr.execute()
 
+    # 失败完成工作任务
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
         with await self.pool as conn:
             await conn.unwatch()
@@ -715,6 +765,7 @@ class Worker:
                 tr.set(result_key_prefix + job_id, result_data, expire=expire)
             await tr.execute()
 
+    # 定时健康检查
     async def heart_beat(self) -> None:
         now = datetime.now()
         await self.record_health()
@@ -722,6 +773,7 @@ class Worker:
         cron_window_size = max(self.poll_delay_s, 0.5)  # Clamp the cron delay to 0.5
         await self.run_cron(now, cron_window_size)
 
+    # 执行定时任务
     async def run_cron(self, n: datetime, delay: float, num_windows: int = 2) -> None:
         job_futures = set()
 
@@ -735,10 +787,10 @@ class Worker:
                     cron_job.next_run = n
                 else:
                     cron_job.calculate_next(n)
-                    # This isn't getting run this iteration in any case.
+                    # 在任何情况下，都不会运行此迭代。
                     continue
 
-            # We queue up the cron if the next execution time is in the next
+            # 如果下一次执行时间是在下一个时间段，我们将cron排队
             # delay * num_windows (by default 0.5 * 2 = 1 second).
             if cron_job.next_run < this_hb_cutoff:
                 job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
@@ -751,6 +803,7 @@ class Worker:
 
         job_futures and await asyncio.gather(*job_futures)
 
+    # 健康检查详情
     async def record_health(self) -> None:
         now_ts = time()
         if (now_ts - self._last_health_check) < self.health_check_interval:
@@ -784,6 +837,7 @@ class Worker:
         except NotImplementedError:  # pragma: no cover
             logger.debug('Windows does not support adding a signal handler to an eventloop')
 
+
     def _jobs_started(self) -> int:
         return self.jobs_complete + self.jobs_retried + self.jobs_failed + len(self.tasks)
 
@@ -804,8 +858,7 @@ class Worker:
         self.on_stop and self.on_stop(sig)
 
     async def close(self) -> None:
-        # is_action 0
-        # close worker_key_close_expire or delete
+        # redis 键设置为 删除或者延迟
         value = {
             "is_action": 0,
             "queue_name": self.queue_name,
