@@ -9,15 +9,17 @@ from typing import Any, Callable, Generator, List, Optional, Tuple, Union, Dict
 from urllib.parse import urlparse
 from uuid import uuid4
 
-import aioredis
-from aioredis import MultiExecError, Redis
+import aioredis  # v2.0
+from aioredis import Redis, ConnectionPool
+from aioredis.exceptions import RedisError, WatchError
+from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
 
-from aiorq.constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
+from constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
     task_key, \
     health_check_key_suffix
-from aiorq.jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
-from aiorq.utils import timestamp_ms, to_ms, to_unix_ms
+from jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('aiorq.connections')
 
@@ -84,7 +86,7 @@ class AioRedis(Redis):  # type: ignore
 
     def __init__(
             self,
-            pool_or_conn: Any,
+            pool_or_conn: Optional[ConnectionPool] = None,
             job_serializer: Optional[Serializer] = None,
             job_deserializer: Optional[Deserializer] = None,
             default_queue_name: str = default_queue_name,
@@ -95,7 +97,9 @@ class AioRedis(Redis):  # type: ignore
         self.job_deserializer = job_deserializer
         self.default_queue_name = default_queue_name
         self.default_worker_name = default_worker_name
-        super().__init__(pool_or_conn, **kwargs)
+        if pool_or_conn:
+            kwargs['connection_pool'] = pool_or_conn
+        super().__init__(**kwargs)
 
     # 任务加入 redis 队列
     async def enqueue_job(
@@ -135,11 +139,10 @@ class AioRedis(Redis):  # type: ignore
         expires_ms = to_ms(_expires)
 
         # self 代表类 redis 链接类
-        with await self as conn:
+        async with self.pipeline(transaction=True) as pipe:
             # aioredis 管道
-            pipe = conn.pipeline()
-            pipe.unwatch()
-            pipe.watch(job_key)
+            await pipe.unwatch()
+            await pipe.watch(job_key)
             # 是否存在该键
             job_exists = pipe.exists(job_key)
             job_result_exists = pipe.exists(result_key_prefix + job_id)
@@ -162,16 +165,15 @@ class AioRedis(Redis):  # type: ignore
                                 serializer=self.job_serializer)
 
             # redis 批处理执行
-            tr = conn.multi_exec()
+            pipe.multi()
 
             # 添加任务id到 redis 队列
-            tr.psetex(job_key, expires_ms, job)
-            tr.zadd(_queue_name, score, job_id)
+            pipe.psetex(job_key, expires_ms, job)
+            pipe.zadd(_queue_name, {job_id: score})
             try:
-                await tr.execute()
-            except MultiExecError:
+                await pipe.execute()
+            except WatchError:
                 # job got enqueued since we checked 'job_exists'
-                await asyncio.gather(*tr._results, return_exceptions=True)
                 return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
@@ -199,7 +201,7 @@ class AioRedis(Redis):  # type: ignore
         """
         获取所有任务方法
         """
-        v = await self.get(task_key, encoding=None)
+        v = await self.get(task_key)
         return v.decode()
 
     async def all_workers(self) -> List[Dict]:
@@ -209,17 +211,17 @@ class AioRedis(Redis):  # type: ignore
         keys = await self.keys(worker_key + '*')
         workers_ = []
         for key_ in keys:
-            v = await self.get(key_, encoding=None)
+            v = await self.get(key_)
             workers_.append(v.decode())
         return workers_
 
     # 获取健康检查结果
     async def _get_health_check(self, worker_name: str) -> Dict:
-        v = await self.get(f"{health_check_key_suffix}{worker_name}", encoding=None)
+        v = await self.get(f"{health_check_key_suffix}{worker_name}")
         return v
 
     async def _get_job_def(self, job_id: str, score: int) -> JobDef:
-        v = await self.get(job_key_prefix + job_id, encoding=None)
+        v = await self.get(job_key_prefix + job_id)
         jd = deserialize_job(v, deserializer=self.job_deserializer)
         jd.score = score
         jd.job_id = job_id
@@ -234,7 +236,6 @@ class AioRedis(Redis):  # type: ignore
         return await asyncio.gather(*[self._get_job_def(job_id, score) for job_id, score in jobs])
 
 
-# 创建 redis 连接池 返回 AioRedis
 async def create_pool(
         settings_: RedisSettings = None,
         *,
@@ -244,10 +245,11 @@ async def create_pool(
         default_queue_name: str = default_queue_name,
 ) -> AioRedis:
     """
-    创建一个新的redis池，如果连接失败，最多重试“conn_retries”次。
-    类似于“aioredis”。创建_redis_pool``除非它返回一个：class:`aiorq。连接。
-    从而允许工作排队。
+    Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
+
+    Returns a :class:`arq.connections.ArqRedis` instance, thus allowing job enqueuing.
     """
+    global pool_or_conn
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
     assert not (
@@ -255,33 +257,38 @@ async def create_pool(
     ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
 
     if settings.sentinel:
-        addr: Any = settings.host
 
-        async def pool_factory(*args: Any, **kwargs: Any) -> Redis:
-            client = await aioredis.sentinel.create_sentinel_pool(*args, ssl=settings.ssl, **kwargs)
-            return client.master_for(settings.sentinel_master)
+        def pool_factory(*args: Any, **kwargs: Any) -> AioRedis:
+            client = Sentinel(*args, sentinels=settings.host, ssl=settings.ssl, **kwargs)
+            return client.master_for(settings.sentinel_master, redis_class=AioRedis)
 
     else:
-        pool_factory = functools.partial(
-            aioredis.create_pool, create_connection_timeout=settings.conn_timeout, ssl=settings.ssl
+        from urllib.parse import quote
+        # 创建 redis 池
+        print(f"redis://:{settings.password}@{settings.host}:{settings.port}/{settings.database}")
+        pool_or_conn = aioredis.ConnectionPool.from_url(
+            f"redis://:{quote(settings.password)}@{settings.host}:{settings.port}/{settings.database}",
+            decode_responses=True
         )
-        addr = settings.host, settings.port
+        pool_factory = functools.partial(
+            AioRedis,
+            pool_or_conn=pool_or_conn,
+        )
 
     try:
-        # 创建 redis 池
-        pool = await pool_factory(addr, db=settings.database, password=settings.password, encoding='utf8')
-        pool = AioRedis(
-            pool,
-            job_serializer=job_serializer,
-            job_deserializer=job_deserializer,
-            default_queue_name=default_queue_name,
-        )
 
-    except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
+        pool = pool_factory(socket_connect_timeout=settings.conn_timeout, ssl=settings.ssl, encoding='utf8')
+        pool.job_serializer = job_serializer
+        pool.job_deserializer = job_deserializer
+        pool.default_queue_name = default_queue_name
+        await pool.ping()
+
+    except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
             logger.warning(
-                'redis connection error %s %s %s, %d retries remaining...',
-                addr,
+                'redis connection error %s:%s %s %s, %d retries remaining...',
+                settings.host,
+                settings.port,
                 e.__class__.__name__,
                 e,
                 settings.conn_retries - retry,
@@ -294,7 +301,8 @@ async def create_pool(
             logger.info('redis connection successful')
         return pool
 
-    # 递归地尝试在except块之外创建池以避免“在处理上述异常时……”疯狂
+    # recursively attempt to create the pool outside the except block to avoid
+    # "During handling of the above exception..." madness
     return await create_pool(
         settings,
         retry=retry + 1,
@@ -303,17 +311,19 @@ async def create_pool(
         default_queue_name=default_queue_name,
     )
 
+
 # 日志方法
 async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:
-    with await redis as r:
-        # 获取 redis 服务 内存 客户端 键的个数 数据库大小
-        info_server, info_memory, info_clients, key_count = await asyncio.gather(
-            r.info(section='Server'), r.info(section='Memory'), r.info(section='Clients'), r.dbsize(),
-        )
+    async with redis.pipeline(transaction=True) as pipe:
+        pipe.info(section='Server')
+        pipe.info(section='Memory')
+        pipe.info(section='Clients')
+        pipe.dbsize()
+        info_server, info_memory, info_clients, key_count = await pipe.execute()
 
-    redis_version = info_server.get('server', {}).get('redis_version', '?')
-    mem_usage = info_memory.get('memory', {}).get('used_memory_human', '?')
-    clients_connected = info_clients.get('clients', {}).get('connected_clients', '?')
+    redis_version = info_server.get('redis_version', '?')
+    mem_usage = info_memory.get('used_memory_human', '?')
+    clients_connected = info_clients.get('connected_clients', '?')
 
     log_func(
         f'redis_version={redis_version} '

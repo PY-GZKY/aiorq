@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from aioredis import Redis
 
-from aiorq.constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
-from aiorq.utils import ms_to_datetime, poll, timestamp_ms
+from constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('aiorq.jobs')
 
@@ -119,7 +119,7 @@ class Job:
         info: Optional[JobDef] = await self.result_info()
         # 这里如果获取不到就会去获取 job info
         if not info:
-            v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
+            v = await self._redis.get(job_key_prefix + self.job_id)
             if v:
                 # print("info v: ", v)
                 info = deserialize_job(v, deserializer=self._deserializer)
@@ -134,7 +134,7 @@ class Job:
         有关作业结果的信息（如果可用）不会等待结果。不会引发异常 即使这份工作养了一只。
         这里会立即返回结果  如果还没有结果 那就返回 None
         """
-        v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
+        v = await self._redis.get(result_key_prefix + self.job_id)
         if v:
             # print(deserialize_result(v, deserializer=self._deserializer))
             return deserialize_result(v, deserializer=self._deserializer)

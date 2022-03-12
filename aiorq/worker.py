@@ -10,12 +10,12 @@ from signal import Signals
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
-from aioredis import MultiExecError
+from aioredis.exceptions import  ResponseError, WatchError
 from pydantic.utils import import_string
 
-from .connections import AioRedis, RedisSettings, create_pool, log_redis_info
-from .version import __version__
-from .constants import (
+from connections import RedisSettings, create_pool, log_redis_info, AioRedis
+from version import __version__
+from constants import (
     abort_job_max_age,
     abort_jobs_ss,
     default_queue_name,
@@ -29,13 +29,13 @@ from .constants import (
     task_key, worker_key_close_expire, default_worker_name
 
 )
-from .cron import CronJob
-from .jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
-from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, as_int, \
+from cron import CronJob
+from jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
+from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, as_int, \
     get_user_name, gen_uuid
 
 if TYPE_CHECKING:
-    from .typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('aiorq.worker')
 no_result = object()
@@ -283,6 +283,7 @@ class Worker:
             "worker_name": worker_name,
             "time_": str(ms_to_datetime(as_int(time() * 1000))),
         }
+        print("pool: ", _pool)
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value))
 
     # 设置 任务方法到 redis
@@ -370,6 +371,7 @@ class Worker:
     # main 主入口方法
     async def main(self) -> None:
         if self._pool is None:
+            print("创建池")
             self._pool = await create_pool(
                 self.redis_settings,
                 job_deserializer=self.job_deserializer,
@@ -386,7 +388,7 @@ class Worker:
         logger.info(f'Starting Queue: {self.queue_name}')
         logger.info(f'Starting Worker: {self.worker_name}')
         logger.info(f'Starting Functions: {", ".join(self.functions)}')
-
+        print("self.pool: ",self.pool)
         await log_redis_info(self.pool, logger.info)
         # 将 redis 作为上下文环境
         self.ctx['redis'] = self.pool
@@ -425,8 +427,7 @@ class Worker:
             now = timestamp_ms()
             # 获取一组 job_ids
             job_ids = await self.pool.zrangebyscore(
-                self.queue_name, offset=self._queue_read_offset, count=count, max=now
-            )
+                self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now)
 
         # 任务开始工作 根据 job_ids
         await self.start_jobs(job_ids, worker_name)
@@ -450,14 +451,14 @@ class Worker:
         """
         检查“中止作业”排序集中的作业ID，然后取消这些任务。
         """
-        with await self.pool as conn:
-            abort_job_ids, _ = await asyncio.gather(
-                conn.zrange(abort_jobs_ss),
-                conn.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age),
-            )
+        async with self.pool.pipeline(transaction=True) as pipe:
+            pipe.zrange(abort_jobs_ss, start=0, end=-1)
+            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
+            abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
-        for job_id in abort_job_ids:
+        for job_id_bytes in abort_job_ids:
+            job_id = job_id_bytes.decode()
             try:
                 task = self.job_tasks[job_id]
             except KeyError:
@@ -480,28 +481,25 @@ class Worker:
             await self.sem.acquire()
             # 产生正在运行的 in_progress_key_prefix
             in_progress_key = in_progress_key_prefix + job_id
-            with await self.pool as conn:
-                pipe = conn.pipeline()
-                pipe.unwatch()
-                pipe.watch(in_progress_key)
-                pipe.exists(in_progress_key)
-                pipe.zscore(self.queue_name, job_id)
-                _, _, ongoing_exists, score = await pipe.execute()
+            async with self.pool.pipeline(transaction=True) as pipe:
+                await pipe.unwatch()
+                await pipe.watch(in_progress_key)
+                ongoing_exists = await pipe.exists(in_progress_key)
+                score = await pipe.zscore(self.queue_name, job_id)
                 if ongoing_exists or not score:
                     # 作业已在其他位置开始，或已完成并从队列中移除
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
 
-                tr = conn.multi_exec()
-                tr.setex(in_progress_key, self.in_progress_timeout_s, b'1')
+                pipe.multi()
+                pipe.psetex(in_progress_key,int(self.in_progress_timeout_s * 1000), b'1')
                 try:
-                    await tr.execute()
-                except MultiExecError:
+                    await pipe.execute()
+                except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
-                    await asyncio.gather(*tr._results, return_exceptions=True)
                 else:
                     # 调用创建 任务 并执行任务
                     t = self.loop.create_task(self.run_job(job_id, score, worke_namer))
@@ -512,17 +510,16 @@ class Worker:
     # 运行工作任务
     async def run_job(self, job_id: str, score: int, worker_name: str) -> None:  # noqa: C901
         start_ms = timestamp_ms()
-        coros = (
-            self.pool.get(job_key_prefix + job_id, encoding=None),
-            self.pool.incr(retry_key_prefix + job_id),
-            self.pool.expire(retry_key_prefix + job_id, 88400),
-        )
-        # 如果允许中断 拿到 abort_job
-        if self.allow_abort_jobs:
-            abort_job, v, job_try, _ = await asyncio.gather(self.pool.zrem(abort_jobs_ss, job_id), *coros)
-        else:
-            v, job_try, _ = await asyncio.gather(*coros)
-            abort_job = False
+        async with self.pool.pipeline(transaction=True) as pipe:
+            pipe.get(job_key_prefix + job_id)
+            pipe.incr(retry_key_prefix + job_id)
+            pipe.expire(retry_key_prefix + job_id, 88400)
+            if self.allow_abort_jobs:
+                pipe.zrem(abort_jobs_ss, job_id)
+                v, job_try, _, abort_job = await pipe.execute()
+            else:
+                v, job_try, _ = await pipe.execute()
+                abort_job = False
 
         function_name, enqueue_time_ms = '<unknown>', 0
         args: Tuple[Any, ...] = ()
@@ -865,7 +862,7 @@ class Worker:
             "worker_name": self.worker_name,
             "time_": str(ms_to_datetime(as_int(time() * 1000))),
         }
-        await self._pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value), expire=worker_key_close_expire)
+        await self._pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value))
 
         if not self._handle_signals:
             self.handle_sig(signal.SIGUSR1)
@@ -875,8 +872,8 @@ class Worker:
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
-        self.pool.close()
-        await self.pool.wait_closed()
+
+        await self.pool.close()
         self._pool = None
 
     def __repr__(self) -> str:

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence,
 
 from dateutil import tz
 
-from .constants import time_zone
+from constants import time_zone
 
 logger = logging.getLogger('aiorq.utils')
 
