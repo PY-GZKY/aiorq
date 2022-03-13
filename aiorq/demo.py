@@ -8,12 +8,12 @@ from cron import cron
 
 
 async def say_hello(ctx, name) -> None:
-    await asyncio.sleep(30)
+    await asyncio.sleep(3)
     print(f"Hello {name}")
 
 
 async def say_hi(ctx, name) -> None:
-    await asyncio.sleep(3)
+    await asyncio.sleep(10)
     print(f"Hi {name}")
 
 
@@ -45,5 +45,6 @@ class WorkerSettings:
 
     allow_abort_jobs = True
 
-    worker_name = None
-    # queue_name = "aiorq:queue1"
+    worker_name =  "pai"
+
+    queue_name = "pai:queue"
