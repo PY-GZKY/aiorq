@@ -28,10 +28,20 @@ async def get_health_check(request: Request, worker_name):
     return {"result": json.loads(result)}
 
 
+
 @app.get("/enqueue_job_")
 async def enqueue_job_(request: Request):
-    job = await request.app.state.redis.enqueue_job('say_hello', name="wt", _queue_name="aiorq:queue",_job_try=4)
+    job = await request.app.state.redis.enqueue_job('say_hello', name="wt", _queue_name="aiorq:queue", _job_try=4)
     job_ = await job.info()
+    # print(job_.function,job_.args,job_.kwargs,job_.job_try,job_.enqueue_time)
+    """
+    function: str
+    args: Tuple[Any, ...]
+    kwargs: Dict[str, Any]
+    job_try: int
+    enqueue_time: str
+    score: Optional[int]
+    """
     return {"job_": job_}
 
 
@@ -72,6 +82,7 @@ async def get_all_result(request: Request, worker=None, task=None, job_id=None):
 
     return {"results_": all_result_}
 
+
 @app.get("/queued_jobs")
 async def queued_jobs(request: Request, queue_name="aiorq:queue"):
     queued_jobs_ = await request.app.state.redis.queued_jobs(queue_name=queue_name)
@@ -93,4 +104,5 @@ async def job_status(request: Request, job_id="12673208ee3b417192b7cce06844adda"
 
 if __name__ == '__main__':
     import uvicorn
+
     uvicorn.run(app='main:app', host="0.0.0.0", port=9999, reload=True)
