@@ -76,7 +76,7 @@ expires_extra_ms = 86_400_000
 
 class AioRedis(Redis):  # type: ignore
     """
-    “`aioredis”的一个小类。Redis``增加了：func:`aiorq。连接。排队等待工作`。
+    aioredis 的一个小类。Redis增加了：func:aiorq。连接。排队等待工作`。
     ：param redis_settings:“`aiorq”的一个实例。连接。重新定义设置``。
     ：param job_serializer：将Python对象序列化为字节的函数，默认为pickle。倾倒
     ：param job_反序列化器：将字节反序列化为Python对象的函数，默认为pickle。荷载
@@ -164,10 +164,8 @@ class AioRedis(Redis):  # type: ignore
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, _queue_name,
                                 serializer=self.job_serializer)
 
-            # redis 批处理执行
+            # redis 批处理执行 添加任务id到 redis 队列
             pipe.multi()
-
-            # 添加任务id到 redis 队列
             pipe.psetex(job_key, expires_ms, job)
             pipe.zadd(_queue_name, {job_id: score})
             try:
@@ -264,11 +262,10 @@ async def create_pool(
 
     else:
         from urllib.parse import quote
-        # 创建 redis 池
-        print(f"redis://:{settings.password}@{settings.host}:{settings.port}/{settings.database}")
+        # print(f"redis://:{settings.password}@{settings.host}:{settings.port}/{settings.database}")
         pool_or_conn = aioredis.ConnectionPool.from_url(
             f"redis://:{quote(settings.password)}@{settings.host}:{settings.port}/{settings.database}",
-            decode_responses=True
+            # decode_responses=True
         )
         pool_factory = functools.partial(
             AioRedis,
@@ -276,7 +273,6 @@ async def create_pool(
         )
 
     try:
-
         pool = pool_factory(socket_connect_timeout=settings.conn_timeout, ssl=settings.ssl, encoding='utf8')
         pool.job_serializer = job_serializer
         pool.job_deserializer = job_deserializer
