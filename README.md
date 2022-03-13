@@ -29,7 +29,7 @@ pip install aioredis
 ### Task Definition
 
 ```python
-# tasks.py
+# demo.py
 # -*- coding: utf-8 -*-
 
 import asyncio
