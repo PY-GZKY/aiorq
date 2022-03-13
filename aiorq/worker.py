@@ -276,14 +276,13 @@ class Worker:
         self.job_deserializer = job_deserializer
 
     # 设置 工作者到 redis
-    async def _set_worker(self, _pool, worker_name, ):
+    async def _set_worker(self, _pool, worker_name,):
         value = {
             "is_action": 1,
             "queue_name": self.queue_name,
             "worker_name": worker_name,
-            "time_": str(ms_to_datetime(as_int(time() * 1000))),
+            "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S"),
         }
-        print("pool: ", _pool)
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value))
 
     # 设置 任务方法到 redis
@@ -310,7 +309,7 @@ class Worker:
                     "keep_result_forever": f_.keep_result_forever,
                     "max_tries": f_.max_tries,
                     "next_run": f_.next_run,
-                    "time_": str(ms_to_datetime(as_int(time() * 1000)))
+                    "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
                 }
             else:
                 is_timer = 0
@@ -318,7 +317,7 @@ class Worker:
                     "is_timer": is_timer,
                     "function_name": f_.name,
                     "coroutine": f_.coroutine.__qualname__,
-                    "time_": str(ms_to_datetime(as_int(time() * 1000)))
+                    "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
                 }
 
             functions_.append(function_)
@@ -368,10 +367,9 @@ class Worker:
     def pool(self) -> AioRedis:
         return cast(AioRedis, self._pool)
 
-    # main 主入口方法
+    # main
     async def main(self) -> None:
         if self._pool is None:
-            print("创建池")
             self._pool = await create_pool(
                 self.redis_settings,
                 job_deserializer=self.job_deserializer,
@@ -388,7 +386,6 @@ class Worker:
         logger.info(f'Starting Queue: {self.queue_name}')
         logger.info(f'Starting Worker: {self.worker_name}')
         logger.info(f'Starting Functions: {", ".join(self.functions)}')
-        print("self.pool: ",self.pool)
         await log_redis_info(self.pool, logger.info)
         # 将 redis 作为上下文环境
         self.ctx['redis'] = self.pool
@@ -472,14 +469,16 @@ class Worker:
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
     # 开始执行普通任务
-    async def start_jobs(self, job_ids: List[str], worke_namer: str) -> None:
+    async def start_jobs(self, job_ids: List[bytes], worke_namer: str) -> None:
         """
         对于每个作业id，获取作业定义，检查它是否未运行，并在任务中启动它
         """
-        for job_id in job_ids:
+        for job_id_b in job_ids:
             # 获取一个 锁 这里为什么要这么设计呢
             await self.sem.acquire()
             # 产生正在运行的 in_progress_key_prefix
+            job_id = job_id_b.decode()
+            # print("in_progress_key_prefix:",in_progress_key_prefix,"job_id:",job_id)
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool.pipeline(transaction=True) as pipe:
                 await pipe.unwatch()
@@ -703,7 +702,6 @@ class Worker:
                 worker_name,
                 serializer=self.job_serializer,
             )
-            # print("result_data: ", result_data)
 
         await asyncio.shield(
             self.finish_job(
@@ -721,29 +719,28 @@ class Worker:
             keep_result_forever: bool,
             incr_score: Optional[int],
             keep_in_progress: Optional[float],
-
     ) -> None:
-        with await self.pool as conn:
-            await conn.unwatch()
-            tr = conn.multi_exec()
+        async with self.pool.pipeline(transaction=True) as pipe:
+            await pipe.unwatch()
+            pipe.multi()
             delete_keys = []
             in_progress_key = in_progress_key_prefix + job_id
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
-                tr.expire(in_progress_key, keep_in_progress)
+                pipe.expire(in_progress_key, keep_in_progress)
 
             if finish:
                 if result_data:
                     expire = 0 if keep_result_forever else result_timeout_s
-                    tr.set(result_key_prefix + job_id, result_data, expire=expire)
+                    pipe.set(result_key_prefix + job_id, result_data,  px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
-                tr.zrem(abort_jobs_ss, job_id)
-                tr.zrem(self.queue_name, job_id)
+                pipe.zrem(abort_jobs_ss, job_id)
+                pipe.zrem(self.queue_name, job_id)
             elif incr_score:
-                tr.zincrby(self.queue_name, incr_score, job_id)
-            tr.delete(*delete_keys)
-            await tr.execute()
+                pipe.zincrby(self.queue_name, incr_score, job_id)
+            pipe.delete(*delete_keys)
+            await pipe.execute()
 
     # 失败完成工作任务
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
