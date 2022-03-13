@@ -1,14 +1,11 @@
 import asyncio
 import getpass
+import json
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
-
-from dateutil import tz
-
-from constants import time_zone
 
 logger = logging.getLogger('aiorq.utils')
 
@@ -32,7 +29,7 @@ def to_unix_ms(dt: datetime) -> int:
 
 
 def ms_to_datetime(unix_ms: int) -> datetime:
-    tz_ = tz.gettz(time_zone)
+    tz_ =timezone(timedelta(hours=8))
     return datetime.fromtimestamp(unix_ms / 1000, tz=tz_)
 
 
@@ -115,3 +112,5 @@ def get_user_name():
 
 def gen_uuid():
     return str(uuid.uuid4())
+
+
