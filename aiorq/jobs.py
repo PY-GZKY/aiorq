@@ -42,8 +42,12 @@ class JobDef:
     kwargs: Dict[str, Any]
     job_try: int
     enqueue_time: datetime
-    queue_name: str
     score: Optional[int]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.score, float):
+            self.score = int(self.score)
+        self.enqueue_time = self.enqueue_time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 
@@ -57,6 +61,10 @@ class JobResult(JobDef):
     worker_name: str
     job_id: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        self.start_time = self.start_time.strftime("%Y-%m-%d %H:%M:%S")
+        self.finish_time = self.finish_time.strftime("%Y-%m-%d %H:%M:%S")
+
 
 class Job:
     """
@@ -69,7 +77,7 @@ class Job:
         self,
         job_id: str,
         redis: Redis,
-        _queue_name: str = None,
+        _queue_name: str = default_queue_name,
         _worker_name: str = None,
         _deserializer: Optional[Deserializer] = None,
     ):
@@ -112,7 +120,6 @@ class Job:
 
     async def info(self) -> Optional[JobDef]:
         """
-
         作业的所有信息，包括其结果（如果可用），都不会等待结果
         这里如果获取不到 result info 就会去获取 job info
         """
@@ -121,9 +128,7 @@ class Job:
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id)
             if v:
-                # print("info v: ", v)
                 info = deserialize_job(v, deserializer=self._deserializer)
-
         if info:
             # 获取到了就把 score 值附上去并返回
             info.score = await self._redis.zscore(self._queue_name, self.job_id)
@@ -136,7 +141,6 @@ class Job:
         """
         v = await self._redis.get(result_key_prefix + self.job_id)
         if v:
-            # print(deserialize_result(v, deserializer=self._deserializer))
             return deserialize_result(v, deserializer=self._deserializer)
         else:
             return None
@@ -259,13 +263,13 @@ def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) ->
         deserializer = pickle.loads
     try:
         d = deserializer(r)
+        # print("d: ",d,ms_to_datetime(d['et']))
         return JobDef(
             function=d['f'],
             args=d['a'],
             kwargs=d['k'],
             job_try=d['t'],
             enqueue_time=ms_to_datetime(d['et']),
-            queue_name=d['q'],
             score=None,
         )
     except Exception as e:
@@ -289,6 +293,7 @@ def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None)
         deserializer = pickle.loads
     try:
         d = deserializer(r)
+        # print(d)
         return JobResult(
             job_try=d['t'],
             function=d['f'],
