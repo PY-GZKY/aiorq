@@ -1,6 +1,6 @@
 import asyncio
+import json
 import logging
-import pickle
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
@@ -33,6 +33,7 @@ class JobStatus(str, Enum):
     complete = 'complete'
     #: job not found in any way
     not_found = 'not_found'
+
 
 
 @dataclass
@@ -90,12 +91,10 @@ class Job:
         self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: float = None
     ) -> Any:
         """
-        获取作业的结果，包括在尚未可用时等待。如果工作引发了一个例外，
-        它将在这里提出。
+        获取作业的结果，包括在尚未可用时等待。如果工作引发了一个例外，它将在这里提出。
         ：param timeout：在引发“TimeoutError”之前等待作业结果的最长时间将永远等待
         ：param poll_delay：为作业结果轮询redis的频率
         ：param pole_delay:已弃用，请改用poll_delay
-
         这里一直等待任务完成并返回结果
         否则一直阻塞
         """
@@ -203,10 +202,10 @@ def serialize_job(
     queue_name: str,
     *,
     serializer: Optional[Serializer] = None,
-) -> Optional[bytes]:
+) -> Optional[str]:
     data = {'t': job_try, 'f': function_name, 'a': args, 'k': kwargs, 'et': enqueue_time_ms, 'q': queue_name}
     if serializer is None:
-        serializer = pickle.dumps
+        serializer = json.dumps
     try:
         return serializer(data)
     except Exception as e:
@@ -228,7 +227,7 @@ def serialize_result(
     worker_name: str,
     *,
     serializer: Optional[Serializer] = None,
-) -> Optional[bytes]:
+) -> Optional[str]:
     data = {
         't': job_try,
         'f': function,
@@ -243,7 +242,7 @@ def serialize_result(
         'w': worker_name
     }
     if serializer is None:
-        serializer = pickle.dumps
+        serializer = json.dumps
     try:
         return serializer(data)
     except Exception:
@@ -260,7 +259,7 @@ def serialize_result(
 
 def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobDef:
     if deserializer is None:
-        deserializer = pickle.loads
+        deserializer = json.loads
     try:
         d = deserializer(r)
         # print("d: ",d,ms_to_datetime(d['et']))
@@ -280,7 +279,7 @@ def deserialize_job_raw(
     r: bytes, *, deserializer: Optional[Deserializer] = None
 ) -> Tuple[str, Tuple[Any, ...], Dict[str, Any], int, int]:
     if deserializer is None:
-        deserializer = pickle.loads
+        deserializer = json.loads
     try:
         d = deserializer(r)
         return d['f'], d['a'], d['k'], d['t'], d['et']
@@ -290,10 +289,9 @@ def deserialize_job_raw(
 
 def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobResult:
     if deserializer is None:
-        deserializer = pickle.loads
+        deserializer = json.loads
     try:
         d = deserializer(r)
-        # print(d)
         return JobResult(
             job_try=d['t'],
             function=d['f'],
