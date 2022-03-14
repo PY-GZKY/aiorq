@@ -1,9 +1,6 @@
 from typing import List
 
 from pydantic import BaseModel
-from tortoise.contrib.pydantic import pydantic_model_creator, pydantic_queryset_creator
-
-from rearq.server.models import Job, JobResult
 
 
 class JobListOut(BaseModel):
