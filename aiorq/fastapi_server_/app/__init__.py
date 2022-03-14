@@ -30,7 +30,7 @@ def create_app():
     register_redis(app)
     # register_mongodb(app)
     register_cors(app)
-    # register_router(app)
+    register_router(app)
     # register_static_file(app)
 
     return app
@@ -84,7 +84,7 @@ def register_cors(app: FastAPI):
 def register_router(app: FastAPI):
     app.include_router(
         api_v1_router,
-        # prefix=settings.API_V1_STR  # 前缀
+        # prefix=settings.API_V1_STR
     )
 
 
