@@ -1,10 +1,10 @@
 from fastapi import APIRouter
 
-from aiorq.fastapi_server_.api.api_v1.index import router as index_router
-from aiorq.fastapi_server_.api.api_v1.job import router as job_router
-from aiorq.fastapi_server_.api.api_v1.result import router as result_router
-from aiorq.fastapi_server_.api.api_v1.task import router as task_router
-from aiorq.fastapi_server_.api.api_v1.worker import router as worker_router
+from aiorq.fastapi_server_.app.api.api_v1.index import router as index_router
+from aiorq.fastapi_server_.app.api.api_v1.job import router as job_router
+from aiorq.fastapi_server_.app.api.api_v1.result import router as result_router
+from aiorq.fastapi_server_.app.api.api_v1.task import router as task_router
+from aiorq.fastapi_server_.app.api.api_v1.worker import router as worker_router
 
 router = APIRouter()
 
