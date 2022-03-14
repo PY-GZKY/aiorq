@@ -13,12 +13,11 @@ from aioredis import Redis, ConnectionPool
 from aioredis.exceptions import RedisError, WatchError
 from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
-from utils import timestamp_ms, to_ms, to_unix_ms
 
-from constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
-    func_key, \
+from aiorq.constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
     health_check_key_suffix, task_key
-from jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from aiorq.jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from aiorq.utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('aiorq.connections')
 
@@ -279,7 +278,7 @@ async def create_pool(
         pool.job_serializer = job_serializer
         pool.job_deserializer = job_deserializer
         pool.default_queue_name = default_queue_name
-        await pool.ping() # ping
+        await pool.ping()  # ping
 
     except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
