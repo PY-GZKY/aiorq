@@ -174,6 +174,7 @@ async def get_all_result(request: Request, worker=None, task=None, job_id=None):
 
     return {"results_": all_result_}
 
+
 @app.get("/queued_jobs")
 async def queued_jobs(request: Request, queue_name="aiorq:queue"):
     queued_jobs_ = await request.app.state.redis.queued_jobs(queue_name=queue_name)
@@ -195,6 +196,7 @@ async def job_status(request: Request, job_id="12673208ee3b417192b7cce06844adda"
 
 if __name__ == '__main__':
     import uvicorn
+
     uvicorn.run(app='main:app', host="0.0.0.0", port=9999, reload=True)
 ```
 
