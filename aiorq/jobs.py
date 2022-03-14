@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from aioredis import Redis
 
-from constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
-from utils import ms_to_datetime, poll, timestamp_ms
+from aiorq.constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from aiorq.utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('aiorq.jobs')
 
