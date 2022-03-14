@@ -7,12 +7,12 @@ from pydantic.utils import import_string
 from signal import Signals
 from typing import TYPE_CHECKING, cast
 
-from logs import default_log_config
-from version import __version__
-from worker import check_health, create_worker, run_worker
+from aiorq.logs import default_log_config
+from aiorq.version import __version__
+from aiorq.worker import check_health, create_worker, run_worker
 
 if TYPE_CHECKING:
-    from typing_ import WorkerSettingsType
+    from aiorq.typing_ import WorkerSettingsType
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit.'
@@ -33,6 +33,7 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     CLI to run the aiorq worker.
     """
     sys.path.append(os.getcwd())
+
     # cast 并无实际作用 作为类型判断 import_string(worker_settings) 字符转类型
     worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings)) # <class 'tasks.WorkerSettings'>
     logging.config.dictConfig(default_log_config(verbose))
@@ -75,4 +76,5 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
         await worker.close()
 
 if __name__ == '__main__':
+    sys.path.insert(0, ".")
     cli()
