@@ -1,62 +1,22 @@
-from typing import Optional
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from starlette.requests import Request
-
-from rearq import ReArq, constants
-from rearq.server import templates
-from rearq.server.depends import get_pager, get_rearq
-from rearq.server.models import JobResult
-from rearq.server.responses import JobResultListOut
 
 router = APIRouter()
 
 
-@router.get("/data", response_model=JobResultListOut)
-async def get_results(
-    task: Optional[str] = None,
-    job_id: Optional[str] = None,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
-    worker: Optional[str] = None,
-    success: Optional[str] = None,
-    pager=Depends(get_pager),
-):
-    qs = JobResult.all().select_related("job")
-    if task:
-        qs = qs.filter(job__task=task)
-    if job_id:
-        qs = qs.filter(job__job_id=job_id)
-    if start_time:
-        qs = qs.filter(start_time__gte=start_time)
-    if end_time:
-        qs = qs.filter(start_time__lte=end_time)
+@router.get("/get_all_result")
+async def get_all_result(request: Request, worker=None, task=None, job_id=None):
+    all_result_ = await request.app.state.redis.all_job_results()
     if worker:
-        qs = qs.filter(worker=worker)
-    if success:
-        qs = qs.filter(success=success == "1")
-    results = await qs.limit(pager[0]).offset(pager[1])
-    return {"rows": results, "total": await qs.count()}
+        all_result_ = [result_ for result_ in all_result_ if result_.get("worker_name") == worker]
+    if task:
+        all_result_ = [result_ for result_ in all_result_ if result_.get("function") == task]
+    if job_id:
+        all_result_ = [result_ for result_ in all_result_ if result_.get("job_id") == job_id]
+
+    return {"results_": all_result_}
 
 
 @router.delete("")
-async def delete_result(ids: str):
-    return await JobResult.filter(id__in=ids.split(",")).delete()
-
-
-@router.get("", include_in_schema=False)
-async def result(
-    request: Request,
-    rearq: ReArq = Depends(get_rearq),
-):
-    workers_info = await rearq.redis.hgetall(constants.WORKER_KEY)
-
-    return templates.TemplateResponse(
-        "result.html",
-        {
-            "request": request,
-            "page_title": "result",
-            "tasks": rearq.task_map.keys(),
-            "workers": workers_info.keys(),
-        },
-    )
+async def delete_result():
+    ...
