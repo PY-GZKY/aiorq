@@ -1,5 +1,4 @@
 import json
-import os
 
 from fastapi import FastAPI
 from starlette.requests import Request
@@ -14,10 +13,10 @@ app = FastAPI()
 async def startup() -> None:
     app.state.redis = await create_pool(
         RedisSettings(
-            host=os.getenv("REDIS_HOST", "127.0.0.1"),
-            port=os.getenv("REDIS_PORT", 6379),
-            database=os.getenv("REDIS_DATABASE", 0),
-            password=os.getenv("REDIS_PASSWORD", None)
+            host="127.0.0.1",
+            port=6379,
+            database=0,
+            password=None
         )
     )
 
@@ -28,10 +27,9 @@ async def get_health_check(request: Request, worker_name):
     return {"result": json.loads(result)}
 
 
-
 @app.get("/enqueue_job_")
 async def enqueue_job_(request: Request):
-    job = await request.app.state.redis.enqueue_job('say_hello', name="wt", _queue_name="aiorq:queue", _job_try=4)
+    job = await request.app.state.redis.enqueue_job('say_hello', name="wutong", _queue_name="aiorq:queue", _job_try=3)
     job_ = await job.info()
     return {"job_": job_}
 
