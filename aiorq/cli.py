@@ -34,10 +34,7 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     """
     sys.path.append(os.getcwd())
     # cast 并无实际作用 作为类型判断 import_string(worker_settings) 字符转类型
-    worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings))
-    #  <class 'tasks.WorkerSettings'>
-    print("worker_settings_: ",worker_settings_)
-
+    worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings)) # <class 'tasks.WorkerSettings'>
     logging.config.dictConfig(default_log_config(verbose))
 
     if check:
