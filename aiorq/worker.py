@@ -10,11 +10,12 @@ from signal import Signals
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
-from aioredis.exceptions import  ResponseError, WatchError
+from aioredis.exceptions import ResponseError, WatchError
 from pydantic.utils import import_string
+from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
+    get_user_name
 
 from connections import RedisSettings, create_pool, log_redis_info, AioRedis
-from version import __version__
 from constants import (
     abort_job_max_age,
     abort_jobs_ss,
@@ -26,19 +27,25 @@ from constants import (
     result_key_prefix,
     retry_key_prefix,
     worker_key,
-    task_key, worker_key_close_expire, default_worker_name
+    worker_key_close_expire, default_worker_name, func_key, cron_key
 
 )
 from cron import CronJob
 from jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
-from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, as_int, \
-    get_user_name, gen_uuid
+from version import __version__
 
 if TYPE_CHECKING:
     from typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('aiorq.worker')
 no_result = object()
+
+
+@dataclass
+class Worker_:
+    is_action: Optional[bool]
+    queue_name: str
+    worker_name: str
 
 
 @dataclass
@@ -84,6 +91,7 @@ def func(
     keep_result = to_seconds(keep_result)
 
     return Function(name or coroutine_.__qualname__, coroutine_, timeout, keep_result, keep_result_forever, max_tries)
+
 
 # 重试类 派生于 RuntimeError
 class Retry(RuntimeError):
@@ -132,8 +140,7 @@ class RetryJob(RuntimeError):
 
 class Worker:
     """
-    运行作业的主类。
-
+    运行作业的主类
     ：param functions：要注册的函数列表，可以是原始协同例程函数，也可以是结果：func:`aiorq。工人func`。
     ：param queue_name：从中获取作业的队列名称
     ：param cron_jobs:要运行的cron jobs列表，使用：func:`aiorq。克朗。cron`创建它们
@@ -154,7 +161,7 @@ class Worker:
     ：param health_check_key：设置健康检查的redis键
     ：param ctx:保存额外用户定义状态的字典
     ：param retry_jobs：是否在重试时重试作业或取消错误
-    ：param allow_abort_jobs:是否在调用：func:`aiorq时中止作业。乔布斯。工作流产`
+    ：param allow_abort_jobs:是否在调用：func:aiorq时中止作业。乔布斯。工作流产
     ：param max_burst_jobs：在突发模式下要处理的最大作业数（使用负值禁用）
     ：param job_serializer：将Python对象序列化为字节的函数，默认为pickle。倾倒
     ：param job_反序列化器：将字节反序列化为Python对象的函数，默认为pickle。荷载
@@ -198,9 +205,9 @@ class Worker:
                 raise ValueError('If queue_name is absent, redis_pool must be present.')
         self.queue_name = f'{queue_name}'
         if worker_name:
-            self.worker_name = f'{worker_name}@{gen_uuid()}'
+            self.worker_name = f'{worker_name}'
         else:
-            self.worker_name = f'{get_user_name()}@{gen_uuid()}'
+            self.worker_name = f'{get_user_name()}'
 
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
@@ -276,52 +283,26 @@ class Worker:
         self.job_deserializer = job_deserializer
 
     # 设置 工作者到 redis
-    async def _set_worker(self, _pool, worker_name,):
-        value = {
-            "is_action": 1,
-            "queue_name": self.queue_name,
-            "worker_name": worker_name,
-            "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value))
+    async def _set_worker(self, _pool, worker_name, ):
+        worker_ = Worker_(is_action=True, queue_name=self.queue_name, worker_name=worker_name)
+        worker_.__dict__.update({'time_': ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")})
+        await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_.__dict__))
 
     # 设置 任务方法到 redis
     async def _set_functions(self, _pool):
-        functions_ = []
+        functions_, crons_ = [], []
         for f_ in self.functions.values():
+            function_ = {
+                "name": f_.name,
+                "coroutine": f_.coroutine.__qualname__,
+                "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
+            }
             if isinstance(f_, CronJob):
-                is_timer = 1
-                function_ = {
-                    "is_timer": is_timer,
-                    "function_name": f_.name,
-                    "coroutine": f_.coroutine.__qualname__,
-                    "month": f_.month,
-                    "day": f_.day,
-                    "weekday": f_.weekday,
-                    "hour": f_.hour,
-                    "minute": str(f_.minute),
-                    "second": f_.second,
-                    "microsecond": f_.microsecond,
-                    "run_at_startup": f_.run_at_startup,
-                    "unique": f_.unique,
-                    "timeout_s": f_.timeout_s,
-                    "keep_result_s": f_.keep_result_s,
-                    "keep_result_forever": f_.keep_result_forever,
-                    "max_tries": f_.max_tries,
-                    "next_run": f_.next_run,
-                    "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
-                }
+                crons_.append(function_)
             else:
-                is_timer = 0
-                function_ = {
-                    "is_timer": is_timer,
-                    "function_name": f_.name,
-                    "coroutine": f_.coroutine.__qualname__,
-                    "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
-                }
-
-            functions_.append(function_)
-        await _pool.set(f'{task_key}', json.dumps(functions_))
+                functions_.append(function_)
+        await _pool.set(f'{func_key}', json.dumps(functions_))
+        await _pool.set(f'{cron_key}', json.dumps(crons_))
 
     def run(self) -> None:
         """
@@ -478,7 +459,6 @@ class Worker:
             await self.sem.acquire()
             # 产生正在运行的 in_progress_key_prefix
             job_id = job_id_b.decode()
-            # print("in_progress_key_prefix:",in_progress_key_prefix,"job_id:",job_id)
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool.pipeline(transaction=True) as pipe:
                 await pipe.unwatch()
@@ -492,7 +472,7 @@ class Worker:
                     continue
 
                 pipe.multi()
-                pipe.psetex(in_progress_key,int(self.in_progress_timeout_s * 1000), b'1')
+                pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
                 except (ResponseError, WatchError):
@@ -588,6 +568,7 @@ class Worker:
 
         # 最大重试次数
         max_tries = self.max_tries if function.max_tries is None else function.max_tries
+
         # 工作重试次数大于方法重试次数 立即返回执行失败
         if job_try > max_tries:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
@@ -609,7 +590,6 @@ class Worker:
                 serializer=self.job_serializer,
             )
             return await asyncio.shield(self.finish_failed_job(job_id, result_data))
-
         result = no_result
         exc_extra = None
         finish = False
@@ -732,8 +712,9 @@ class Worker:
 
             if finish:
                 if result_data:
+                    print(result_data)
                     expire = 0 if keep_result_forever else result_timeout_s
-                    pipe.set(result_key_prefix + job_id, result_data,  px=to_ms(expire))
+                    pipe.psetex(result_key_prefix + job_id, to_ms(expire), result_data)
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 pipe.zrem(abort_jobs_ss, job_id)
                 pipe.zrem(self.queue_name, job_id)
@@ -744,26 +725,27 @@ class Worker:
 
     # 失败完成工作任务
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
-        with await self.pool as conn:
-            await conn.unwatch()
-            tr = conn.multi_exec()
-            tr.delete(
-                retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id,
+        async with self.pool.pipeline(transaction=True) as pipe:
+            await pipe.unwatch()
+            pipe.multi()
+            pipe.delete(
+                retry_key_prefix + job_id,
+                in_progress_key_prefix + job_id,
+                job_key_prefix + job_id,
             )
-            tr.zrem(abort_jobs_ss, job_id)
-            tr.zrem(self.queue_name, job_id)
+            pipe.zrem(abort_jobs_ss, job_id)
+            pipe.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch
                 expire = 0 if self.keep_result_forever else self.keep_result_s
-                tr.set(result_key_prefix + job_id, result_data, expire=expire)
-            await tr.execute()
+                pipe.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
+            await pipe.execute()
 
     # 定时健康检查
     async def heart_beat(self) -> None:
         now = datetime.now()
         await self.record_health()
-
         cron_window_size = max(self.poll_delay_s, 0.5)  # Clamp the cron delay to 0.5
         await self.run_cron(now, cron_window_size)
 
@@ -806,31 +788,16 @@ class Worker:
         self._last_health_check = now_ts
         pending_tasks = sum(not t.done() for t in self.tasks.values())
         queued = await self.pool.zcard(self.queue_name)
-
-        info = (
-            f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
-            f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
-        )
-        # await self.pool.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
-
-        log_suffix = info[info.index('j_complete='):]
-        if self._last_health_check_log and log_suffix != self._last_health_check_log:
-            logger.info('recording health: %s', info)
-            self._last_health_check_log = log_suffix
-        elif not self._last_health_check_log:
-            self._last_health_check_log = log_suffix
-
         info = {"j_complete": self.jobs_complete, "j_failed": self.jobs_failed, "j_retried": self.jobs_retried,
                 "j_ongoing": pending_tasks, "queued": queued}
-        # print("健康检查：", info)
-        await self.pool.setex(self.health_check_key, self.health_check_interval + 1, json.dumps(info))
+        print("健康检查：", info)
+        await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), json.dumps(info))
 
     def _add_signal_handler(self, signum: Signals, handler: Callable[[Signals], None]) -> None:
         try:
             self.loop.add_signal_handler(signum, partial(handler, signum))
         except NotImplementedError:  # pragma: no cover
             logger.debug('Windows does not support adding a signal handler to an eventloop')
-
 
     def _jobs_started(self) -> int:
         return self.jobs_complete + self.jobs_retried + self.jobs_failed + len(self.tasks)
@@ -852,21 +819,21 @@ class Worker:
         self.on_stop and self.on_stop(sig)
 
     async def close(self) -> None:
-        # redis 键设置为 删除或者延迟
-        value = {
-            "is_action": 0,
-            "queue_name": self.queue_name,
-            "worker_name": self.worker_name,
-            "time_": str(ms_to_datetime(as_int(time() * 1000))),
-        }
-        await self._pool.set(f'{worker_key}:{self.worker_name}', json.dumps(value))
-
         if not self._handle_signals:
             self.handle_sig(signal.SIGUSR1)
         if not self._pool:
             return
+
+        # redis 键设置为 删除或者延迟  默认一周
+        worker_ = Worker_(is_action=False, queue_name=self.queue_name, worker_name=self.worker_name)
+        worker_.__dict__.update({'time_': ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")})
+        await self.pool.psetex(f'{worker_key}:{self.worker_name}',
+                               int(worker_key_close_expire * 1000),
+                               json.dumps(worker_.__dict__))
+
         await asyncio.gather(*self.tasks.values())
         await self.pool.delete(self.health_check_key)
+
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
 
@@ -896,9 +863,11 @@ def run_worker(settings_cls: 'WorkerSettingsType', **kwargs: Any) -> Worker:
     return worker
 
 
+# 查询健康 key 是否存在
 async def async_check_health(
-        redis_settings: Optional[RedisSettings], health_check_key: Optional[str] = None,
-        worker_name: Optional[str] = None
+        redis_settings: Optional[RedisSettings],
+        health_check_key: Optional[str] = None,
+        worker_name: Optional[str] = None,
 ) -> int:
     redis_settings = redis_settings or RedisSettings()
     redis: AioRedis = await create_pool(redis_settings)
@@ -912,11 +881,11 @@ async def async_check_health(
     else:
         logger.info('Health check successful: %s', data)
         r = 0
-    redis.close()
-    await redis.wait_closed()
+    await redis.close()
     return r
 
 
+# 验证健康 key 是否存在
 def check_health(settings_cls: 'WorkerSettingsType') -> int:
     """
     Run a health check on the worker and return the appropriate exit code.
