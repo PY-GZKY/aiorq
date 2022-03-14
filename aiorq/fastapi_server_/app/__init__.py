@@ -15,7 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi import FastAPI
 
-from aiorq.fastapi_server_.app.api import router as api_v1_router
+from aiorq.fastapi_server_.app.api import api_v1_router
 
 
 def create_app():
