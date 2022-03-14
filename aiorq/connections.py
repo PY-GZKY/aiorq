@@ -9,17 +9,16 @@ from typing import Any, Callable, Generator, List, Optional, Tuple, Union, Dict
 from urllib.parse import urlparse
 from uuid import uuid4
 
-import aioredis  # v2.0
 from aioredis import Redis, ConnectionPool
 from aioredis.exceptions import RedisError, WatchError
 from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
+from utils import timestamp_ms, to_ms, to_unix_ms
 
 from constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
-    task_key, \
-    health_check_key_suffix
+    func_key, \
+    health_check_key_suffix, task_key
 from jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
-from utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('aiorq.connections')
 
@@ -76,7 +75,6 @@ expires_extra_ms = 86_400_000
 
 class AioRedis(Redis):  # type: ignore
     """
-    aioredis 的一个小类。Redis增加了：func:aiorq。连接。排队等待工作`。
     ：param redis_settings:“`aiorq”的一个实例。连接。重新定义设置``。
     ：param job_serializer：将Python对象序列化为字节的函数，默认为pickle。倾倒
     ：param job_反序列化器：将字节反序列化为Python对象的函数，默认为pickle。荷载
@@ -116,7 +114,6 @@ class AioRedis(Redis):  # type: ignore
     ) -> Optional[Job]:
         """
         Enqueue a job.
-
         ：param function:要调用的函数的名称
         ：param args：传递给函数的参数
         ：param _job_id：作业的id，可用于强制作业唯一性
@@ -176,14 +173,14 @@ class AioRedis(Redis):  # type: ignore
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
     # 根据 key 获取工作结果
-    async def _get_job_result(self, key: str) -> JobResult:
+    async def _get_job_result(self, key: bytes) -> JobResult:
         # 获取组合键的后半部分
         job_id = key[len(result_key_prefix):]
+        job_id = job_id.decode()
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
         if r is None:
             raise KeyError(f'job "{key}" not found')
-        # 附上 job_id
         r.job_id = job_id
         return r
 
@@ -199,8 +196,12 @@ class AioRedis(Redis):  # type: ignore
         """
         获取所有任务方法
         """
-        v = await self.get(task_key)
-        return v.decode()
+        keys = await self.keys(task_key + '*')
+        workers_ = []
+        for key_ in keys:
+            v = await self.get(key_)
+            workers_.append(v.decode())
+        return workers_
 
     async def all_workers(self) -> List[Dict]:
         """
@@ -218,8 +219,8 @@ class AioRedis(Redis):  # type: ignore
         v = await self.get(f"{health_check_key_suffix}{worker_name}")
         return v
 
-    async def _get_job_def(self, job_id: str, score: int) -> JobDef:
-        v = await self.get(job_key_prefix + job_id)
+    async def _get_job_def(self, job_id: bytes, score: int) -> JobDef:
+        v = await self.get(job_key_prefix + job_id.decode())
         jd = deserialize_job(v, deserializer=self.job_deserializer)
         jd.score = score
         jd.job_id = job_id
@@ -230,8 +231,8 @@ class AioRedis(Redis):  # type: ignore
         """
         Get information about queued, mostly useful when testing.
         """
-        jobs = await self.zrange(queue_name, withscores=True)
-        return await asyncio.gather(*[self._get_job_def(job_id, score) for job_id, score in jobs])
+        jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
+        return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
 
 async def create_pool(
@@ -244,10 +245,8 @@ async def create_pool(
 ) -> AioRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
-
     Returns a :class:`arq.connections.ArqRedis` instance, thus allowing job enqueuing.
     """
-    global pool_or_conn
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
     assert not (
@@ -255,29 +254,32 @@ async def create_pool(
     ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
 
     if settings.sentinel:
-
         def pool_factory(*args: Any, **kwargs: Any) -> AioRedis:
             client = Sentinel(*args, sentinels=settings.host, ssl=settings.ssl, **kwargs)
             return client.master_for(settings.sentinel_master, redis_class=AioRedis)
 
     else:
+        """
         from urllib.parse import quote
-        # print(f"redis://:{settings.password}@{settings.host}:{settings.port}/{settings.database}")
-        pool_or_conn = aioredis.ConnectionPool.from_url(
-            f"redis://:{quote(settings.password)}@{settings.host}:{settings.port}/{settings.database}",
-            # decode_responses=True
+        redis_uri = f"redis://:{quote(settings.password)}@{settings.host}:{settings.port}/{settings.database}"
+        pool_or_conn = aioredis.from_url(
+            redis_uri, decode_responses=True
         )
+        """
         pool_factory = functools.partial(
             AioRedis,
-            pool_or_conn=pool_or_conn,
+            host=settings.host,
+            port=settings.port,
+            socket_connect_timeout=settings.conn_timeout,
+            ssl=settings.ssl
         )
 
     try:
-        pool = pool_factory(socket_connect_timeout=settings.conn_timeout, ssl=settings.ssl, encoding='utf8')
+        pool = pool_factory(db=settings.database, password=settings.password, encoding='utf8')
         pool.job_serializer = job_serializer
         pool.job_deserializer = job_deserializer
         pool.default_queue_name = default_queue_name
-        await pool.ping()
+        await pool.ping() # ping
 
     except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
