@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-"""
-定义返回的状态
-"""
-from fastapi import status
-from fastapi.responses import JSONResponse, Response  # , ORJSONResponse
 from typing import Union
 
+from fastapi import status
+from fastapi.responses import JSONResponse, Response
 
-def resp_200(*, data: Union[list, dict, str] = "200 Success",message:str ="Success" ) -> Response:
+
+def resp_200(*, data: Union[list, dict, str] = "200 Success", message: str = "Success") -> Response:
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={
@@ -17,7 +15,8 @@ def resp_200(*, data: Union[list, dict, str] = "200 Success",message:str ="Succe
         }
     )
 
-def resp_204(*, data: Union[list, dict, str] = "204 Success",message:str ="Success" ) -> Response:
+
+def resp_204(*, data: Union[list, dict, str] = "204 Success", message: str = "Success") -> Response:
     return JSONResponse(
         status_code=status.HTTP_204_NO_CONTENT,
         content={
@@ -27,7 +26,8 @@ def resp_204(*, data: Union[list, dict, str] = "204 Success",message:str ="Succe
         }
     )
 
-def resp_400(*, data: str = None, message: str="400 BAD REQUEST") -> Response:
+
+def resp_400(*, data: str = None, message: str = "400 BAD REQUEST") -> Response:
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={
@@ -37,7 +37,8 @@ def resp_400(*, data: str = None, message: str="400 BAD REQUEST") -> Response:
         }
     )
 
-def resp_401(*, data: str = None, message: str="401 Unauthorized") -> Response:
+
+def resp_401(*, data: str = None, message: str = "401 Unauthorized") -> Response:
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content={
@@ -47,7 +48,8 @@ def resp_401(*, data: str = None, message: str="401 Unauthorized") -> Response:
         }
     )
 
-def resp_403(*, data: str = None, message: str="403 Forbidden") -> Response:
+
+def resp_403(*, data: str = None, message: str = "403 Forbidden") -> Response:
     return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,
         content={
@@ -57,7 +59,8 @@ def resp_403(*, data: str = None, message: str="403 Forbidden") -> Response:
         }
     )
 
-def resp_404(*, data: str = None, message: str="404 Page Not Found") -> Response:
+
+def resp_404(*, data: str = None, message: str = "404 Page Not Found") -> Response:
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={
@@ -67,7 +70,8 @@ def resp_404(*, data: str = None, message: str="404 Page Not Found") -> Response
         }
     )
 
-def resp_422(*, data: str = None, message: Union[list, dict, str]="422 UNPROCESSABLE_ENTITY") -> Response:
+
+def resp_422(*, data: str = None, message: Union[list, dict, str] = "422 UNPROCESSABLE_ENTITY") -> Response:
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
@@ -77,7 +81,8 @@ def resp_422(*, data: str = None, message: Union[list, dict, str]="422 UNPROCESS
         }
     )
 
-def resp_500(*, data: str = None, message: Union[list, dict, str]=" 500 Server Internal Error") -> Response:
+
+def resp_500(*, data: str = None, message: Union[list, dict, str] = " 500 Server Internal Error") -> Response:
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -89,7 +94,7 @@ def resp_500(*, data: str = None, message: Union[list, dict, str]=" 500 Server I
 
 
 # 自定义
-def resp_5000(*, data: Union[list, dict, str]=None, message: str="Token failure") -> Response:
+def resp_5000(*, data: Union[list, dict, str] = None, message: str = "Token failure") -> Response:
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -99,7 +104,8 @@ def resp_5000(*, data: Union[list, dict, str]=None, message: str="Token failure"
         }
     )
 
-def resp_5001(*, data: Union[list, dict, str]=None, message: str="User Not Found") -> Response:
+
+def resp_5001(*, data: Union[list, dict, str] = None, message: str = "User Not Found") -> Response:
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
