@@ -12,11 +12,9 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 
 from aioredis.exceptions import ResponseError, WatchError
 from pydantic.utils import import_string
-from aiorq.utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
-    get_user_name
 
-from aiorq.connections import RedisSettings, create_pool, log_redis_info, AioRedis
-from aiorq.constants import (
+from connections import RedisSettings, create_pool, log_redis_info, AioRedis
+from constants import (
     abort_job_max_age,
     abort_jobs_ss,
     default_queue_name,
@@ -27,15 +25,17 @@ from aiorq.constants import (
     result_key_prefix,
     retry_key_prefix,
     worker_key,
-    worker_key_close_expire, default_worker_name, func_key, cron_key
+    worker_key_close_expire, default_worker_name, func_key
 
 )
-from aiorq.cron import CronJob
-from aiorq.jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
-from aiorq.version import __version__
+from cron import CronJob
+from jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
+from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
+    get_user_name
+from version import __version__
 
 if TYPE_CHECKING:
-    from aiorq.typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('aiorq.worker')
 no_result = object()
@@ -97,7 +97,7 @@ def func(
 class Retry(RuntimeError):
     """
     重试作业的特殊异常（如果尚未达到“最大重试次数”）。
-    ：param defer：重新运行作业之前等待的持续时间
+    :param defer:重新运行作业之前等待的持续时间
     """
 
     def __init__(self, defer: Optional['SecondsTimedelta'] = None):
@@ -141,30 +141,30 @@ class RetryJob(RuntimeError):
 class Worker:
     """
     运行作业的主类
-    ：param functions：要注册的函数列表，可以是原始协同例程函数，也可以是结果：func:`aiorq。工人func`。
-    ：param queue_name：从中获取作业的队列名称
-    ：param cron_jobs:要运行的cron jobs列表，使用：func:`aiorq。克朗。cron`创建它们
-    ：param redis_settings：用于创建redis连接的设置
-    ：param redis_pool：现有redis pool，通常无
-    ：param burst：所有作业运行后是否停止工作进程
-    ：param on_startup:coroutine函数在启动时运行
-    ：param on_shutdown：关闭时运行的协同程序功能
-    ：param handle_signals：默认为true，寄存器信号处理程序，在其他异步框架内运行时设置为false
-    ：param max_jobs：一次运行的最大作业数
-    ：param job_timeout：默认作业超时（最大运行时间）
-    ：param keep_result：保留作业结果的默认持续时间
-    ：参数永远保存结果：是否永远保存结果
-    ：param poll_delay：轮询队列以获取新作业之间的持续时间
-    ：param queue_read_limit：每次轮询队列时从队列中提取的最大作业数；默认情况下等于“最大工作”``
-    ：param max_trytes:默认重试作业的最大次数
-    ：param health_check_interval:设置健康检查键的频率
-    ：param health_check_key：设置健康检查的redis键
-    ：param ctx:保存额外用户定义状态的字典
-    ：param retry_jobs：是否在重试时重试作业或取消错误
-    ：param allow_abort_jobs:是否在调用：func:aiorq时中止作业。乔布斯。工作流产
-    ：param max_burst_jobs：在突发模式下要处理的最大作业数（使用负值禁用）
-    ：param job_serializer：将Python对象序列化为字节的函数，默认为pickle。倾倒
-    ：param job_反序列化器：将字节反序列化为Python对象的函数，默认为pickle。荷载
+    :param functions:要注册的函数列表，可以是原始协同例程函数，也可以是结果:func:`aiorq。工人func`。
+    :param queue_name:从中获取作业的队列名称
+    :param cron_jobs:要运行的cron jobs列表，使用:func:`aiorq。克朗。cron`创建它们
+    :param redis_settings:用于创建redis连接的设置
+    :param redis_pool:现有redis pool，通常无
+    :param burst:所有作业运行后是否停止工作进程
+    :param on_startup:coroutine函数在启动时运行
+    :param on_shutdown:关闭时运行的协同程序功能
+    :param handle_signals:默认为true，寄存器信号处理程序，在其他异步框架内运行时设置为false
+    :param max_jobs:一次运行的最大作业数
+    :param job_timeout:默认作业超时（最大运行时间）
+    :param keep_result:保留作业结果的默认持续时间
+    :参数永远保存结果:是否永远保存结果
+    :param poll_delay:轮询队列以获取新作业之间的持续时间
+    :param queue_read_limit:每次轮询队列时从队列中提取的最大作业数；默认情况下等于“最大工作”``
+    :param max_trytes:默认重试作业的最大次数
+    :param health_check_interval:设置健康检查键的频率
+    :param health_check_key:设置健康检查的redis键
+    :param ctx:保存额外用户定义状态的字典
+    :param retry_jobs:是否在重试时重试作业或取消错误
+    :param allow_abort_jobs:是否在调用:func:aiorq时中止作业。乔布斯。工作流产
+    :param max_burst_jobs:在突发模式下要处理的最大作业数（使用负值禁用）
+    :param job_serializer:将Python对象序列化为字节的函数，默认为pickle。倾倒
+    :param job_反序列化器:将字节反序列化为Python对象的函数，默认为pickle。荷载
     """
 
     def __init__(
@@ -282,27 +282,27 @@ class Worker:
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
 
-    # 设置 工作者到 redis
-    async def _set_worker(self, _pool, worker_name, ):
+    async def _set_worker(self, _pool, worker_name):
         worker_ = Worker_(is_action=True, queue_name=self.queue_name, worker_name=worker_name)
-        worker_.__dict__.update({'time_': ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")})
+        worker_.__dict__.update({
+            'functions': list(self.functions.keys()),
+            'time_': ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S"),
+        })
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_.__dict__))
 
-    # 设置 任务方法到 redis
+
     async def _set_functions(self, _pool):
-        functions_, crons_ = [], []
-        for f_ in self.functions.values():
+        _ = []
+        for name, f_ in self.functions.items():
             function_ = {
                 "name": f_.name,
                 "coroutine": f_.coroutine.__qualname__,
                 "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
             }
-            if isinstance(f_, CronJob):
-                crons_.append(function_)
-            else:
-                functions_.append(function_)
-        await _pool.set(f'{func_key}', json.dumps(functions_))
-        await _pool.set(f'{cron_key}', json.dumps(crons_))
+            function_.update({"is_timer":True}) if isinstance(f_, CronJob) else function_.update({"is_timer": False})
+            _.append(function_)
+        await _pool.set(f'{func_key}', json.dumps(_))
+
 
     def run(self) -> None:
         """
@@ -790,7 +790,7 @@ class Worker:
         queued = await self.pool.zcard(self.queue_name)
         info = {"j_complete": self.jobs_complete, "j_failed": self.jobs_failed, "j_retried": self.jobs_retried,
                 "j_ongoing": pending_tasks, "queued": queued}
-        print("健康检查：", info)
+        print("健康检查:", info)
         await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), json.dumps(info))
 
     def _add_signal_handler(self, signum: Signals, handler: Callable[[Signals], None]) -> None:
