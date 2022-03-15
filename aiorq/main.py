@@ -48,14 +48,14 @@ async def index(request: Request, queue_name="aiorq:queue"):
 
 @app.get("/get_all_workers")
 async def get_all_workers(request: Request):
-    results = await request.app.state.redis.all_workers()
+    results = await request.app.state.redis.get_job_workers()
     results = [json.loads(v) for v in results]
     return {"results": results}
 
 
 @app.get("/get_all_functions")
 async def get_all_functions(request: Request):
-    results = await request.app.state.redis.all_tasks()
+    results = await request.app.state.redis.get_job_funcs()
     return {"results": results}
 
 
