@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from aioredis import Redis
 
-from aiorq.constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
-from aiorq.utils import ms_to_datetime, poll, timestamp_ms
+from constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('aiorq.jobs')
 
@@ -48,7 +48,6 @@ class JobDef:
     def __post_init__(self) -> None:
         if isinstance(self.score, float):
             self.score = int(self.score)
-        self.enqueue_time = self.enqueue_time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 
@@ -65,6 +64,7 @@ class JobResult(JobDef):
     def __post_init__(self) -> None:
         self.start_time = self.start_time.strftime("%Y-%m-%d %H:%M:%S")
         self.finish_time = self.finish_time.strftime("%Y-%m-%d %H:%M:%S")
+        self.enqueue_time = self.enqueue_time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 class Job:
@@ -92,9 +92,9 @@ class Job:
     ) -> Any:
         """
         获取作业的结果，包括在尚未可用时等待。如果工作引发了一个例外，它将在这里提出。
-        ：param timeout：在引发“TimeoutError”之前等待作业结果的最长时间将永远等待
-        ：param poll_delay：为作业结果轮询redis的频率
-        ：param pole_delay:已弃用，请改用poll_delay
+        :param timeout:在引发“TimeoutError”之前等待作业结果的最长时间将永远等待
+        :param poll_delay:为作业结果轮询redis的频率
+        :param pole_delay:已弃用，请改用poll_delay
         这里一直等待任务完成并返回结果
         否则一直阻塞
         """
@@ -166,9 +166,9 @@ class Job:
         """
         工作终止方法
 
-        ：param timeout：在引发“TimeoutError”之前等待作业结果的最长时间，不会永远等待任何人
-        ：param poll_delay：为作业结果轮询redis的频率
-        ：return：如果作业正确中止，则为True，否则为False
+        :param timeout:在引发“TimeoutError”之前等待作业结果的最长时间，不会永远等待任何人
+        :param poll_delay:为作业结果轮询redis的频率
+        :return:如果作业正确中止，则为True，否则为False
         """
         # 设置 redis 为终止键
         await self._redis.zadd(abort_jobs_ss, timestamp_ms(), self.job_id)
