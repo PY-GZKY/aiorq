@@ -39,9 +39,9 @@ class WorkerSettings:
 
     functions = [say_hello, say_hi]
 
-    cron_jobs = [
-        cron(run_regularly, hour={17, 12, 18}, minute=13)
-    ]
+    # cron_jobs = [
+    #     cron(run_regularly, hour={17, 12, 18}, minute=13)
+    # ]
 
     on_startup = startup
 

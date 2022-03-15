@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import json
 import logging
 import ssl
 from dataclasses import dataclass
@@ -14,10 +15,10 @@ from aioredis.exceptions import RedisError, WatchError
 from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
 
-from aiorq.constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
-    health_check_key_suffix, task_key
-from aiorq.jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
-from aiorq.utils import timestamp_ms, to_ms, to_unix_ms
+from constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
+    health_check_key_suffix, func_key
+from jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('aiorq.connections')
 
@@ -74,11 +75,11 @@ expires_extra_ms = 86_400_000
 
 class AioRedis(Redis):  # type: ignore
     """
-    ：param redis_settings:“`aiorq”的一个实例。连接。重新定义设置``。
-    ：param job_serializer：将Python对象序列化为字节的函数，默认为pickle。倾倒
-    ：param job_反序列化器：将字节反序列化为Python对象的函数，默认为pickle。荷载
-    ：param default_queue_name：要使用的默认队列名称，默认为``aiorq。排队``。
-    ：param kwargs：直接传递给``aioredis的关键字参数。Redis``。
+    :param redis_settings: 一个实例。连接。重新定义设置。
+    :param job_serializer:将Python对象序列化为字节的函数，默认为pickle。
+    :param job_反序列化器:将字节反序列化为Python对象的函数，默认为pickle。
+    :param default_queue_name:要使用的默认队列名称。
+    :param kwargs:关键字参数
     """
 
     def __init__(
@@ -113,16 +114,15 @@ class AioRedis(Redis):  # type: ignore
     ) -> Optional[Job]:
         """
         Enqueue a job.
-        ：param function:要调用的函数的名称
-        ：param args：传递给函数的参数
-        ：param _job_id：作业的id，可用于强制作业唯一性
-        ：param _queue_name：作业的队列，可用于在不同队列中创建作业
-        ：param _defer_直到：运行作业的日期时间
-        ：param _defer_by:运行作业前等待的持续时间
-        ：param _expires：如果作业在此持续时间之后仍未启动，请不要运行它
-        ：param _job_try：在作业中重新排队作业时非常有用
-        ：param kwargs：传递给函数的任何关键字参数
-        ：return：：class:`aiorq。乔布斯。Job`instance或`None``如果具有此ID的作业已存在
+        :param function:要调用的函数的名称
+        :param args:传递给函数的参数
+        :param _job_id:作业的id，可用于强制作业唯一性
+        :param _queue_name:作业的队列，可用于在不同队列中创建作业
+        :param _defer_直到:运行作业的日期时间
+        :param _defer_by:运行作业前等待的持续时间
+        :param _expires:如果作业在此持续时间之后仍未启动，请不要运行它
+        :param _job_try:在作业中重新排队作业时非常有用
+        :param kwargs:传递给函数的任何关键字参数
         """
         # 如果 队列名称为 空使用默认名称
         if _queue_name is None:
@@ -136,7 +136,7 @@ class AioRedis(Redis):  # type: ignore
 
         # self 代表类 redis 链接类
         async with self.pipeline(transaction=True) as pipe:
-            # aioredis 管道
+            # 管道
             await pipe.unwatch()
             await pipe.watch(job_key)
             # 是否存在该键
@@ -191,18 +191,15 @@ class AioRedis(Redis):  # type: ignore
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
         return sorted(results, key=attrgetter('enqueue_time'))
 
-    async def all_tasks(self) -> List[Dict]:
+    async def get_job_funcs(self) -> List[Dict]:
         """
         获取所有任务方法
         """
-        keys = await self.keys(task_key + '*')
-        workers_ = []
-        for key_ in keys:
-            v = await self.get(key_)
-            workers_.append(v.decode())
-        return workers_
+        v = await self.get(func_key)
+        return json.loads(v.decode())
 
-    async def all_workers(self) -> List[Dict]:
+
+    async def get_job_workers(self) -> List[Dict]:
         """
         获取所有工作者
         """
@@ -210,7 +207,7 @@ class AioRedis(Redis):  # type: ignore
         workers_ = []
         for key_ in keys:
             v = await self.get(key_)
-            workers_.append(v.decode())
+            workers_.append(json.loads(v.decode()))
         return workers_
 
     # 获取健康检查结果
