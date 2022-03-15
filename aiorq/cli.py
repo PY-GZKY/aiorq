@@ -7,12 +7,12 @@ from pydantic.utils import import_string
 from signal import Signals
 from typing import TYPE_CHECKING, cast
 
-from aiorq.logs import default_log_config
-from aiorq.version import __version__
-from aiorq.worker import check_health, create_worker, run_worker
+from logs import default_log_config
+from version import __version__
+from worker import check_health, create_worker, run_worker
 
 if TYPE_CHECKING:
-    from aiorq.typing_ import WorkerSettingsType
+    from typing_ import WorkerSettingsType
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit.'
