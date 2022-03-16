@@ -3,19 +3,27 @@ from typing import List, Optional, Tuple, Dict, Any
 
 from pydantic import BaseModel
 
+class HealthCheckModel(BaseModel):
+    j_complete: int
+    j_failed: int
+    j_retried: int
+    j_ongoing: int
+    queued: int
+
 
 class FunctionModel(BaseModel):
-    name: str
-    coroutine: str
+    function_name: str
+    coroutine_name: str
     is_timer: bool
-    time_: datetime
+    enqueue_time: datetime
 
 
 class WorkerModel(BaseModel):
     queue_name: str
     worker_name: str
+    functions: list
     is_action: bool
-    time_: datetime  # Optional[Union[float, datetime.timedelta]]
+    enqueue_time: datetime  # Optional[Union[float, datetime.timedelta]]
 
 
 class IndecModel(BaseModel):
@@ -32,7 +40,8 @@ class JobDefModel(BaseModel):
     enqueue_time: datetime
     score: Optional[int]
 
-
+class JobDefsModel(BaseModel):
+    rows: List[JobDefModel]
 
 
 class JobResult_(BaseModel):

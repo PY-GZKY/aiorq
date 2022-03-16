@@ -14,6 +14,7 @@ async def say_hello(ctx, name) -> None:
 async def say_hi(ctx, name) -> None:
     await asyncio.sleep(10)
     print(f"Hi {name}")
+    return name
 
 
 async def startup(ctx):
@@ -48,8 +49,6 @@ class WorkerSettings:
     on_shutdown = shutdown
 
     allow_abort_jobs = True
-
-    # keep_result_forever = True
 
     worker_name = "pai"
 

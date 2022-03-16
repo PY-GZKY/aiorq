@@ -29,7 +29,8 @@ from constants import (
 
 )
 from cron import CronJob
-from jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
+from jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result, \
+    JobWorker
 from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
     get_user_name
 from version import __version__
@@ -40,12 +41,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger('aiorq.worker')
 no_result = object()
 
-
-@dataclass
-class Worker_:
-    is_action: Optional[bool]
-    queue_name: str
-    worker_name: str
 
 
 @dataclass
@@ -283,12 +278,14 @@ class Worker:
         self.job_deserializer = job_deserializer
 
     async def _set_worker(self, _pool, worker_name):
-        worker_ = Worker_(is_action=True, queue_name=self.queue_name, worker_name=worker_name)
-        worker_.__dict__.update({
+        worker_ = {
+            'queue_name':self.queue_name,
+            'worker_name':worker_name,
             'functions': list(self.functions.keys()),
-            'time_': ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S"),
-        })
-        await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_.__dict__))
+            'enqueue_time': timestamp_ms(),
+            'is_action':True
+        }
+        await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_))
 
 
     async def _set_functions(self, _pool):
@@ -297,7 +294,7 @@ class Worker:
             function_ = {
                 "function_name": f_.name,
                 "coroutine_name": f_.coroutine.__qualname__,
-                "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
+                "enqueue_time": timestamp_ms()
             }
             function_.update({"is_timer":True}) if isinstance(f_, CronJob) else function_.update({"is_timer": False})
             _.append(function_)
@@ -826,11 +823,10 @@ class Worker:
             return
 
         # redis 键设置为 删除或者延迟  默认一周
-        worker_ = Worker_(is_action=False, queue_name=self.queue_name, worker_name=self.worker_name)
-        worker_.__dict__.update({'time_': ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")})
+        worker_ = dict(is_action=False, queue_name=self.queue_name, worker_name=self.worker_name,enqueue_time=timestamp_ms())
         await self.pool.psetex(f'{worker_key}:{self.worker_name}',
                                int(worker_key_close_expire * 1000),
-                               json.dumps(worker_.__dict__))
+                               json.dumps(worker_))
 
         await asyncio.gather(*self.tasks.values())
         await self.pool.delete(self.health_check_key)
