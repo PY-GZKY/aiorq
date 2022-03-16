@@ -11,23 +11,21 @@ router = APIRouter()
 @router.get("/get_all_result", response_model=JobResultModel)
 async def all_job_results(
         request: Request,
-        function_name: Optional[str] = None,
+        function: Optional[str] = None,
         job_id: Optional[str] = None,
         start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
+        finish_time: Optional[str] = None,
         worker_name: Optional[str] = None,
-        success: Optional[str] = None,
+        success: bool = None,
 ):
-    all_result_ = await request.app.state.redis.all_job_results()
-    print(all_result_)
-    if worker_name:
-        all_result_ = [result_ for result_ in all_result_ if result_.worker_name == worker_name]
-    if function_name:
-        all_result_ = [result_ for result_ in all_result_ if result_.function == function_name]
-    if job_id:
-        all_result_ = [result_ for result_ in all_result_ if result_.job_id == job_id]
-
-    return {"rows": all_result_}
+    query_ = {
+        "worker_name":worker_name,
+        "function":function
+    }
+    results_ = await request.app.state.redis.all_job_results()
+    for k,v in query_.items():
+        results_ = [result_ for result_ in results_ if result_.__dict__.get(k) == v]
+    return {"rows": results_}
 
 
 @router.delete("")
