@@ -31,3 +31,5 @@ async def all_job_results(
 @router.delete("")
 async def delete_result():
     ...
+
+
