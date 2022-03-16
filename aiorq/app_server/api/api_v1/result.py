@@ -3,10 +3,12 @@ from typing import Optional
 from fastapi import APIRouter
 from starlette.requests import Request
 
+from aiorq.app_server.schemas import JobResultModel
+
 router = APIRouter()
 
 
-@router.get("/get_all_result")
+@router.get("/get_all_result", response_model=JobResultModel)
 async def all_job_results(
         request: Request,
         task: Optional[str] = None,
@@ -17,6 +19,7 @@ async def all_job_results(
         success: Optional[str] = None,
 ):
     all_result_ = await request.app.state.redis.all_job_results()
+    print(all_result_)
     if worker:
         all_result_ = [result_ for result_ in all_result_ if result_.get("worker_name") == worker]
     if task:
@@ -24,7 +27,7 @@ async def all_job_results(
     if job_id:
         all_result_ = [result_ for result_ in all_result_ if result_.get("job_id") == job_id]
 
-    return {"results_": all_result_}
+    return {"rows": all_result_}
 
 
 @router.delete("")

@@ -22,7 +22,6 @@ class JobStatus(str, Enum):
     """
     Enum of job statuses.
     """
-
     #: job is in the queue, time it should be run not yet reached
     deferred = 'deferred'
     #: job is in the queue, time it should run has been reached
@@ -33,7 +32,6 @@ class JobStatus(str, Enum):
     complete = 'complete'
     #: job not found in any way
     not_found = 'not_found'
-
 
 
 @dataclass
@@ -48,7 +46,7 @@ class JobDef:
     def __post_init__(self) -> None:
         if isinstance(self.score, float):
             self.score = int(self.score)
-
+        # self.enqueue_time = self.enqueue_time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -62,9 +60,7 @@ class JobResult(JobDef):
     job_id: Optional[str] = None
 
     def __post_init__(self) -> None:
-        self.start_time = self.start_time.strftime("%Y-%m-%d %H:%M:%S")
-        self.finish_time = self.finish_time.strftime("%Y-%m-%d %H:%M:%S")
-        self.enqueue_time = self.enqueue_time.strftime("%Y-%m-%d %H:%M:%S")
+        ...
 
 
 class Job:
@@ -75,12 +71,12 @@ class Job:
     __slots__ = 'job_id', '_redis', '_queue_name', '_deserializer'
 
     def __init__(
-        self,
-        job_id: str,
-        redis: Redis,
-        _queue_name: str = default_queue_name,
-        _worker_name: str = None,
-        _deserializer: Optional[Deserializer] = None,
+            self,
+            job_id: str,
+            redis: Redis,
+            _queue_name: str = default_queue_name,
+            _worker_name: str = None,
+            _deserializer: Optional[Deserializer] = None,
     ):
         self.job_id = job_id
         self._redis = redis
@@ -88,7 +84,7 @@ class Job:
         self._deserializer = _deserializer
 
     async def result(
-        self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: float = None
+            self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: float = None
     ) -> Any:
         """
         获取作业的结果，包括在尚未可用时等待。如果工作引发了一个例外，它将在这里提出。
@@ -171,7 +167,7 @@ class Job:
         :return:如果作业正确中止，则为True，否则为False
         """
         # 设置 redis 为终止键
-        await self._redis.zadd(abort_jobs_ss, timestamp_ms(), self.job_id)
+        await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
         try:
             # 尝试获取结果
             await self.result(timeout=timeout, poll_delay=poll_delay)
@@ -194,16 +190,23 @@ class DeserializationError(SerializationError):
 
 
 def serialize_job(
-    function_name: str,
-    args: Tuple[Any, ...],
-    kwargs: Dict[str, Any],
-    job_try: Optional[int],
-    enqueue_time_ms: int,
-    queue_name: str,
-    *,
-    serializer: Optional[Serializer] = None,
+        function_name: str,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        job_try: Optional[int],
+        enqueue_time_ms: int,
+        queue_name: str,
+        *,
+        serializer: Optional[Serializer] = None,
 ) -> Optional[str]:
-    data = {'t': job_try, 'f': function_name, 'a': args, 'k': kwargs, 'et': enqueue_time_ms, 'q': queue_name}
+    data = {
+        'job_try': job_try,
+        'function': function_name,
+        'args': args,
+        'kwargs': kwargs,
+        'enqueue_time': enqueue_time_ms,
+        'queue_name': queue_name
+    }
     if serializer is None:
         serializer = json.dumps
     try:
@@ -212,34 +215,65 @@ def serialize_job(
         raise SerializationError(f'unable to serialize job "{function_name}"') from e
 
 
+def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobDef:
+    if deserializer is None:
+        deserializer = json.loads
+    try:
+        d = deserializer(r)
+        return JobDef(
+            function=d['function'],
+            args=d['args'],
+            kwargs=d['kwargs'],
+            job_try=d['job_try'],
+            enqueue_time=ms_to_datetime(d['enqueue_time']),
+            score=None,
+        )
+    except Exception as e:
+        raise DeserializationError('unable to deserialize job') from e
+
+
+def deserialize_job_raw(
+        r: bytes,
+        *,
+        deserializer: Optional[Deserializer] = None
+) -> Tuple[str, Tuple[Any, ...], Dict[str, Any], int, int]:
+    if deserializer is None:
+        deserializer = json.loads
+    try:
+        d = deserializer(r)
+        return d['function'], d['args'], d['kwargs'], d['job_try'], d['enqueue_time']
+    except Exception as e:
+        raise DeserializationError('unable to deserialize job') from e
+
+
 def serialize_result(
-    function: str,
-    args: Tuple[Any, ...],
-    kwargs: Dict[str, Any],
-    job_try: int,
-    enqueue_time_ms: int,
-    success: bool,
-    result: Any,
-    start_ms: int,
-    finished_ms: int,
-    ref: str,
-    queue_name: str,
-    worker_name: str,
-    *,
-    serializer: Optional[Serializer] = None,
+        function: str,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        job_try: int,
+        enqueue_time_ms: int,
+        success: bool,
+        result: Any,
+        start_ms: int,
+        finished_ms: int,
+        ref: str,
+        queue_name: str,
+        worker_name: str,
+        *,
+        serializer: Optional[Serializer] = None,
 ) -> Optional[str]:
     data = {
-        't': job_try,
-        'f': function,
-        'a': args,
-        'k': kwargs,
-        'et': enqueue_time_ms,
-        's': success,
-        'r': result,
-        'st': start_ms,
-        'ft': finished_ms,
-        'q': queue_name,
-        'w': worker_name
+        'job_try': job_try,
+        'function': function,
+        'args': args,
+        'kwargs': kwargs,
+        'enqueue_time_ms': enqueue_time_ms,
+        'success': success,
+        'result': result,
+        'start_ms': start_ms,
+        'finished_ms': finished_ms,
+        'queue_name': queue_name,
+        'worker_name': worker_name
     }
     if serializer is None:
         serializer = json.dumps
@@ -257,54 +291,47 @@ def serialize_result(
     return None
 
 
-def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobDef:
-    if deserializer is None:
-        deserializer = json.loads
-    try:
-        d = deserializer(r)
-        # print("d: ",d,ms_to_datetime(d['et']))
-        return JobDef(
-            function=d['f'],
-            args=d['a'],
-            kwargs=d['k'],
-            job_try=d['t'],
-            enqueue_time=ms_to_datetime(d['et']),
-            score=None,
-        )
-    except Exception as e:
-        raise DeserializationError('unable to deserialize job') from e
-
-
-def deserialize_job_raw(
-    r: bytes, *, deserializer: Optional[Deserializer] = None
-) -> Tuple[str, Tuple[Any, ...], Dict[str, Any], int, int]:
-    if deserializer is None:
-        deserializer = json.loads
-    try:
-        d = deserializer(r)
-        return d['f'], d['a'], d['k'], d['t'], d['et']
-    except Exception as e:
-        raise DeserializationError('unable to deserialize job') from e
-
-
 def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobResult:
     if deserializer is None:
         deserializer = json.loads
     try:
         d = deserializer(r)
         return JobResult(
-            job_try=d['t'],
-            function=d['f'],
-            args=d['a'],
-            kwargs=d['k'],
-            enqueue_time=ms_to_datetime(d['et']),
+            job_try=d['job_try'],
+            function=d['function'],
+            args=d['args'],
+            kwargs=d['kwargs'],
+            enqueue_time=ms_to_datetime(d['enqueue_time']),
             score=None,
-            success=d['s'],
-            result=d['r'],
-            start_time=ms_to_datetime(d['st']),
-            finish_time=ms_to_datetime(d['ft']),
-            queue_name=d.get('q', '<unknown>'),
-            worker_name=d.get('w', '<unknown>')
+            success=d['success'],
+            result=d['result'],
+            start_time=ms_to_datetime(d['start_time']),
+            finish_time=ms_to_datetime(d['finish_time']),
+            queue_name=d.get('queue_name', '<unknown>'),
+            worker_name=d.get('worker_name', '<unknown>')
         )
     except Exception as e:
         raise DeserializationError('unable to deserialize job result') from e
+
+
+def serialize_func(
+        function_name: str,
+        coroutine_name: str,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        serializer: Optional[Serializer] = None,
+) -> Optional[str]:
+    data = {
+        'f': function_name,
+        'c': coroutine_name,
+        'a': args,
+        'k': kwargs
+    }
+    if serializer is None:
+        serializer = json.dumps
+    try:
+        return serializer(data)
+    except Exception:
+        ...
+    return None

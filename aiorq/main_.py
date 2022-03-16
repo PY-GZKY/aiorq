@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from aiorq.app import create_app
+from aiorq.app_server import create_app
 
 app = create_app()
 if __name__ == '__main__':

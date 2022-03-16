@@ -6,10 +6,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
 
 from aiorq import create_pool
-from aiorq.app.api import api_v1_router
-from aiorq.app.config import settings
-from aiorq.app.db.mongodb_ import db
-from aiorq.app.logger import logger
+from aiorq.app_server.api import api_v1_router
+from aiorq.app_server.config import settings
+from aiorq.app_server.db.mongodb_ import mongodb_
+from aiorq.app_server.logger import logger
 from aiorq.connections import RedisSettings
 
 
@@ -23,10 +23,10 @@ def create_app():
     )
 
     register_redis(app)
-    # register_mongodb(app)
+    # register_mongodb(app_server)
     register_cors(app)
     register_router(app)
-    # register_static_file(app)
+    # register_static_file(app_server)
 
     return app
 
@@ -36,10 +36,10 @@ def register_redis(app: FastAPI):
     async def startup():
         app.state.redis = await create_pool(
             RedisSettings(
-                host=os.getenv("REDIS_HOST", "127.0.0.1"),
-                port=os.getenv("REDIS_PORT", 6379),
-                database=os.getenv("REDIS_DATABASE", 0),
-                password=os.getenv("REDIS_PASSWORD", None)
+                host=settings.REDIS_HOST,
+                port=settings.REDIS_PORT,
+                database=settings.REDIS_DATABASE,
+                password=settings.REDIS_PASSWORD,
             )
         )
 
@@ -52,10 +52,11 @@ def register_mongodb(app: FastAPI):
     @app.on_event("startup")
     async def connect_to_mongo():
         try:
-            db.client = AsyncIOMotorClient(settings.MONGODB_URL,
-                                           maxPoolSize=settings.MAX_CONNECTIONS_COUNT,
-                                           minPoolSize=settings.MIN_CONNECTIONS_COUNT
-                                           )
+            mongodb_.client = AsyncIOMotorClient(
+                settings.MONGODB_URL,
+                maxPoolSize=settings.MAX_CONNECTIONS_COUNT,
+                minPoolSize=settings.MIN_CONNECTIONS_COUNT
+            )
             logger.debug("MONGODB 数据库初始化成功 ... DONE")
         except:
             logger.error("MONGODB 数据库初始化失败 ... DONE")

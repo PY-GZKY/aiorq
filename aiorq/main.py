@@ -94,4 +94,4 @@ async def job_status(request: Request, job_id="12673208ee3b417192b7cce06844adda"
 if __name__ == '__main__':
     import uvicorn
 
-    uvicorn.run(app='main:app', host="127.0.0.1", port=9999, reload=True)
+    uvicorn.run(app='main:app_server', host="127.0.0.1", port=9999, reload=True)

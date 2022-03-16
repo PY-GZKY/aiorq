@@ -4,12 +4,10 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 
 
-class DataBase:
+class MotorClient:
     client: AsyncIOMotorClient = None
 
 
-db = DataBase()
-
-
-async def get_database() -> AsyncIOMotorClient:
-    return db.client
+mongodb_ = MotorClient()
+async def get_async_motor() -> AsyncIOMotorClient:
+    return mongodb_.client

@@ -42,10 +42,10 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_USERNAME: str = os.getenv("REDIS_USERNAME", None)
-    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "sanmaoyou_admin_")
-    REDIS_HOST: str = os.getenv("REDIS_HOST", "192.168.0.141")
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", None)
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "127.0.0.1")
     REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
-    REDIS_DATABASE: int = os.getenv("REDIS_DATABASE", 15)
+    REDIS_DATABASE: int = os.getenv("REDIS_DATABASE", 0)
     REDIS_ENCODING: str = os.getenv("REDIS_ENCODING", "utf8")
     REDIS_MAX_CONNECTIONS: int = os.getenv("REDIS_MAX_CONNECTIONS", 10)
     REDIS_URI = f"redis://{REDIS_HOST}:{REDIS_PORT}"
@@ -53,15 +53,13 @@ class Settings(BaseSettings):
     # MongoDB
     MAX_CONNECTIONS_COUNT = int(os.getenv("MAX_CONNECTIONS_COUNT", 10))
     MIN_CONNECTIONS_COUNT = int(os.getenv("MIN_CONNECTIONS_COUNT", 1))
-    MONGODB_URL = os.getenv("MONGODB_URL", "")
-    if not MONGODB_URL:
-        MONGO_HOST: str = os.getenv("MONGO_HOST", "127.0.0.1")
-        MONGO_PORT: int = os.getenv("MONGO_PORT", 27017)
-        MONGO_USER: str = os.getenv("MONGO_USER", "admin")
-        MONGO_PASS: str = os.getenv("MONGO_PASS", "")
-        MONGO_DB: str = os.getenv("MONGO_DB", "")
-        MONGO_TABLE: str = os.getenv("MONGO_TABLE", "")
-        MONGODB_URL: str = f"mongodb://{MONGO_USER}:{parse.quote_plus(MONGO_PASS)}@{MONGO_HOST}:{MONGO_PORT}"
+    MONGO_HOST: str = os.getenv("MONGO_HOST", "127.0.0.1")
+    MONGO_PORT: int = os.getenv("MONGO_PORT", 27017)
+    MONGO_USER: str = os.getenv("MONGO_USER", "admin")
+    MONGO_PASS: str = os.getenv("MONGO_PASS", "")
+    MONGO_DB: str = os.getenv("MONGO_DB", "")
+    MONGO_TABLE: str = os.getenv("MONGO_TABLE", "")
+    MONGODB_URL: str = f"mongodb://{MONGO_USER}:{parse.quote_plus(MONGO_PASS)}@{MONGO_HOST}:{MONGO_PORT}"
 
     class Config:
         case_sensitive = True

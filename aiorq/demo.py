@@ -49,6 +49,8 @@ class WorkerSettings:
 
     allow_abort_jobs = True
 
+    # keep_result_forever = True
+
     worker_name = "pai"
 
     queue_name = "pai:queue"

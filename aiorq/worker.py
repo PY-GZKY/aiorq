@@ -295,8 +295,8 @@ class Worker:
         _ = []
         for name, f_ in self.functions.items():
             function_ = {
-                "name": f_.name,
-                "coroutine": f_.coroutine.__qualname__,
+                "function_name": f_.name,
+                "coroutine_name": f_.coroutine.__qualname__,
                 "time_": ms_to_datetime(timestamp_ms()).strftime("%Y-%m-%d %H:%M:%S")
             }
             function_.update({"is_timer":True}) if isinstance(f_, CronJob) else function_.update({"is_timer": False})
@@ -306,7 +306,8 @@ class Worker:
 
     def run(self) -> None:
         """
-        同步函数来运行 worker，最后关闭 worker 连接。
+        同步函数来运行 worker
+        最后关闭 worker 连接。
         同步函数里面写着 异步函数 用同步调用
         """
         self.main_task = self.loop.create_task(self.main())
@@ -329,7 +330,6 @@ class Worker:
         """
         Run :func:`aiorq.worker.Worker.async_run`, check for failed jobs and raise :class:`aiorq.worker.FailedJobs`
         if any jobs have failed.
-
         :return: number of completed jobs
         """
         if retry_jobs is not None:
@@ -343,12 +343,11 @@ class Worker:
         else:
             return self.jobs_complete
 
-    # 没什么作用 方法变属性而已
+    # 方法变属性而已
     @property
     def pool(self) -> AioRedis:
         return cast(AioRedis, self._pool)
 
-    # main
     async def main(self) -> None:
         if self._pool is None:
             self._pool = await create_pool(
@@ -368,8 +367,10 @@ class Worker:
         logger.info(f'Starting Worker: {self.worker_name}')
         logger.info(f'Starting Functions: {", ".join(self.functions)}')
         await log_redis_info(self.pool, logger.info)
+
         # 将 redis 作为上下文环境
         self.ctx['redis'] = self.pool
+
         # 开始的钩子方法
         if self.on_startup:
             await self.on_startup(self.ctx)

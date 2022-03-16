@@ -1,6 +1,4 @@
-import json
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from starlette.requests import Request
 
 router = APIRouter()
