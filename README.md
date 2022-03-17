@@ -10,7 +10,7 @@
 Aiorq is a distributed task queue with asyncio and redis, which rewrite from arq to make improvement and include web
 interface.
 
-See [documentation](https://aiorq-docs.readthedocs.io) for more details.
+See [documentation](https://aiorq.readthedocs.io) for more details.
 
 ## Requirements
 
