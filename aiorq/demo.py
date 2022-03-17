@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-
+import os
 from cron import cron
 from connections import RedisSettings
 
@@ -29,13 +29,12 @@ async def shutdown(ctx):
 async def run_regularly(ctx):
     print('run foo job at 9.12am, 12.12pm and 6.12pm')
 
-
 class WorkerSettings:
     redis_settings = RedisSettings(
-        host="127.0.0.1",
-        port=6379,
+        host=os.getenv("REDIS_HOST", "127.0.0.1"),
+        port=os.getenv("REDIS_PORT", 6379),
+        password=os.getenv("REDIS_PASSWORD", None),
         database=0,
-        password=None
     )
 
     functions = [say_hello, say_hi]
