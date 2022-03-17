@@ -91,7 +91,7 @@ def func(
 # 重试类 派生于 RuntimeError
 class Retry(RuntimeError):
     """
-    重试作业的特殊异常（如果尚未达到“最大重试次数”）。
+    重试作业的特殊异常（如果尚未达到最大重试次数）。
     :param defer:重新运行作业之前等待的持续时间
     """
 
@@ -136,15 +136,15 @@ class RetryJob(RuntimeError):
 class Worker:
     """
     运行作业的主类
-    :param functions:要注册的函数列表，可以是原始协同例程函数，也可以是结果:func:`aiorq。工人func`。
+    :param functions:要注册的函数列表,可以是原始协同例程函数,也可以是结果:func:`aiorq。工人func`。
     :param queue_name:从中获取作业的队列名称
-    :param cron_jobs:要运行的cron jobs列表，使用:func:`aiorq。克朗。cron`创建它们
+    :param cron_jobs:要运行的cron jobs列表,使用:func:`aiorq。克朗。cron`创建它们
     :param redis_settings:用于创建redis连接的设置
-    :param redis_pool:现有redis pool，通常无
+    :param redis_pool:现有redis pool,通常无
     :param burst:所有作业运行后是否停止工作进程
     :param on_startup:coroutine函数在启动时运行
     :param on_shutdown:关闭时运行的协同程序功能
-    :param handle_signals:默认为true，寄存器信号处理程序，在其他异步框架内运行时设置为false
+    :param handle_signals:默认为true,寄存器信号处理程序,在其他异步框架内运行时设置为false
     :param max_jobs:一次运行的最大作业数
     :param job_timeout:默认作业超时（最大运行时间）
     :param keep_result:保留作业结果的默认持续时间
@@ -158,8 +158,8 @@ class Worker:
     :param retry_jobs:是否在重试时重试作业或取消错误
     :param allow_abort_jobs:是否在调用:func:aiorq时中止作业。乔布斯。工作流产
     :param max_burst_jobs:在突发模式下要处理的最大作业数（使用负值禁用）
-    :param job_serializer:将Python对象序列化为字节的函数，默认为pickle。倾倒
-    :param job_反序列化器:将字节反序列化为Python对象的函数，默认为pickle。荷载
+    :param job_serializer:将Python对象序列化为字节的函数,默认为pickle。倾倒
+    :param job_反序列化器:将字节反序列化为Python对象的函数,默认为pickle。荷载
     """
 
     def __init__(
@@ -388,7 +388,7 @@ class Worker:
     # 开始执行任务列表
     async def _poll_iteration(self, worker_name) -> None:
         """
-        从主队列排序集数据结构中获取挂起作业的ID，并启动这些作业，然后删除自我完成的任何任务。任务。
+        从主队列排序集数据结构中获取挂起作业的ID,并启动这些作业,然后删除自我完成的任何任务。任务。
         """
 
         # 获取的最大并发队列任务数
@@ -399,11 +399,14 @@ class Worker:
                 return
             count = min(burst_jobs_remaining, count)
 
-        async with self.sem:  # 在我们有“空间”运行作业之前，不要 zrangebyscore
+        async with self.sem:  # 在我们有空间运行作业之前,不要 zrangebyscore
             now = timestamp_ms()
-            # 获取一组 job_ids
+            # 巧妙
+            # 用到了 zrangebyscore 属性，获取一组区间值，如果 执行时间（score）在此区间内才能取出任务job_ids
+            # print(f"获取到最大区间：{now}  数量：{count}")
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now)
+            # print(f"获取到一组 jobs: {job_ids}")
 
         # 任务开始工作 根据 job_ids
         await self.start_jobs(job_ids, worker_name)
@@ -422,10 +425,10 @@ class Worker:
         # 定期健康检查
         await self.heart_beat()
 
-    # 查“中止作业”排序集中的作业ID，然后取消这些任务。
+    # 获取中止作业排序集中的作业ID, 然后取消这些任务。
     async def _cancel_aborted_jobs(self) -> None:
         """
-        检查“中止作业”排序集中的作业ID，然后取消这些任务。
+        检查“中止作业”排序集中的作业ID,然后取消这些任务。
         """
         async with self.pool.pipeline(transaction=True) as pipe:
             pipe.zrange(abort_jobs_ss, start=0, end=-1)
@@ -435,22 +438,26 @@ class Worker:
         aborted: Set[str] = set()
         for job_id_bytes in abort_job_ids:
             job_id = job_id_bytes.decode()
+            # 取出 abort_job_id 并且去 job_tasks 查询得到 task
             try:
                 task = self.job_tasks[job_id]
             except KeyError:
                 pass
             else:
+                # 加入 aborted 集合并且取消 task
                 aborted.add(job_id)
                 task.cancel()
 
         if aborted:
+            # 更新集合到 aborting_tasks
             self.aborting_tasks.update(aborted)
+            #  Zrem 命令用于移除有序集中的一个或多个成员，不存在的成员将被忽略
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
     # 开始执行普通任务
     async def start_jobs(self, job_ids: List[bytes], worke_namer: str) -> None:
         """
-        对于每个作业id，获取作业定义，检查它是否未运行，并在任务中启动它
+        对于每个作业id,获取作业定义,检查它是否未运行,并在任务中启动它
         """
         for job_id_b in job_ids:
             # 获取一个 锁 这里为什么要这么设计呢
@@ -463,13 +470,16 @@ class Worker:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
+                # print(f"任务将在 {score} 执行")
                 if ongoing_exists or not score:
-                    # 作业已在其他位置开始，或已完成并从队列中移除
+                    # 作业已在其他位置开始,或已完成并从队列中移除
+                    # 否则直接跳过 (防止重复执行)
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
 
                 pipe.multi()
+                # print("任务开始了!~ 改变状态为正在运行中 !!")
                 pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
@@ -479,6 +489,7 @@ class Worker:
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
                 else:
                     # 调用创建 任务 并执行任务
+                    # print("调用创建 任务 并执行任务!~")
                     t = self.loop.create_task(self.run_job(job_id, score, worke_namer))
                     # 回调方法 释放锁
                     t.add_done_callback(lambda _: self.sem.release())
@@ -536,8 +547,8 @@ class Worker:
             logger.exception('deserializing job %s failed', job_id)
             return await job_failed(e)
 
-        # 这里是判断该方法是否已经加入、存在于中止队列中，如果在 abort_job 为 True，直接抛出 asyncio.CancelledError
-        # 因为如果调用了 abort 方法 会将其 job_id 加入到中止队列，所以这里要判断是否存在于 中止队列中
+        # 这里是判断该方法是否已经加入、存在于中止队列中,如果在 abort_job 为 True,直接抛出 asyncio.CancelledError
+        # 因为如果调用了 abort 方法 会将其 job_id 加入到中止队列,所以这里要判断是否存在于 中止队列中
         if abort_job:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.info('%6.2fs ⊘ %s:%s aborted before start', t, job_id, function_name)
@@ -561,9 +572,9 @@ class Worker:
             ref = f'{job_id}:{function_name}'
             keep_in_progress = None
 
-        # 限定工作重试次数 并产生 retry_key_prefix
-        # enqueue_job_try 任务重试次数
-        # job_try 已经重试了多少次
+        # 限定工作重试次数并产生 retry_key_prefix
+        # enqueue_job_try: 任务重试次数
+        # job_try: 已经重试了多少次
         if enqueue_job_try and enqueue_job_try > job_try:
             job_try = enqueue_job_try
             await self.pool.setex(retry_key_prefix + job_id, 88400, str(job_try))
@@ -597,6 +608,7 @@ class Worker:
         finish = False
         timeout_s = self.job_timeout_s if function.timeout_s is None else function.timeout_s
         incr_score: Optional[int] = None
+        # print("合并上下文 job_ctx!~")
         job_ctx = {
             'job_id': job_id,
             'job_try': job_try,
@@ -610,6 +622,7 @@ class Worker:
         try:
             s = args_to_string(args, kwargs)
             extra = f' job_try={job_try}' if job_try > 1 else ''
+            print(f"启动时间是: {start_ms} ")
             if (start_ms - score) > 1200:
                 extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
@@ -634,28 +647,26 @@ class Worker:
         except (Exception, asyncio.CancelledError) as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
+            
             if self.retry_jobs and isinstance(e, Retry):
                 incr_score = e.defer_score
                 logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (e.defer_score or 0) / 1000)
                 if e.defer_score:
                     incr_score = e.defer_score + (timestamp_ms() - score)
-                self.jobs_retried += 1
             elif job_id in self.aborting_tasks and isinstance(e, asyncio.CancelledError):
                 logger.info('%6.2fs ⊘ %s aborted', t, ref)
                 result = e
                 finish = True
                 self.aborting_tasks.remove(job_id)
-                self.jobs_failed += 1
             elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, RetryJob)):
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
-                self.jobs_retried += 1
             else:
                 logger.exception(
                     '%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': exc_extra}
                 )
                 result = e
                 finish = True
-                self.jobs_failed += 1
+            self.jobs_failed += 1
         else:
             success = True
             finished_ms = timestamp_ms()
@@ -714,7 +725,7 @@ class Worker:
 
             if finish:
                 if result_data:
-                    print(result_data)
+                    # print(result_data)
                     expire = 0 if keep_result_forever else result_timeout_s
                     pipe.psetex(result_key_prefix + job_id, to_ms(expire), result_data)
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
@@ -765,10 +776,10 @@ class Worker:
                     cron_job.next_run = n
                 else:
                     cron_job.calculate_next(n)
-                    # 在任何情况下，都不会运行此迭代。
+                    # 在任何情况下,都不会运行此迭代。
                     continue
 
-            # 如果下一次执行时间是在下一个时间段，我们将cron排队
+            # 如果下一次执行时间是在下一个时间段,我们将cron排队
             # delay * num_windows (by default 0.5 * 2 = 1 second).
             if cron_job.next_run < this_hb_cutoff:
                 job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None

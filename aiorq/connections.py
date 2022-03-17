@@ -148,6 +148,7 @@ class AioRedis(Redis):  # type: ignore
             if await job_exists or await job_result_exists:
                 return None
 
+            # score 是运行任务的时间
             enqueue_time_ms = timestamp_ms()
             if _defer_until is not None:
                 score = to_unix_ms(_defer_until)
@@ -163,6 +164,8 @@ class AioRedis(Redis):  # type: ignore
 
             # redis 批处理执行 添加任务id到 redis 队列
             pipe.multi()
+
+            # 如果到达 expires_ms 这个时间还未执行 redis 超市删除key 即任务取消运行
             pipe.psetex(job_key, expires_ms, job)
             pipe.zadd(_queue_name, {job_id: score})
             try:
