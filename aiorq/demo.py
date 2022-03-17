@@ -7,7 +7,7 @@ from connections import RedisSettings
 
 
 async def say_hello(ctx, name) -> None:
-    await asyncio.sleep(3)
+    await asyncio.sleep(5)
     print(f"Hello {name}")
 
 

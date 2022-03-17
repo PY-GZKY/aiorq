@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter
 from starlette.requests import Request
 
@@ -23,9 +25,9 @@ async def get_health_check(request: Request, worker_name):
 
 @router.get("/enqueue_job_", response_model=JobDefModel)
 async def enqueue_job_(request: Request):
-    job = await request.app.state.redis.enqueue_job('say_hi', name="wutong", _queue_name="pai:queue", _job_try=2,
-                                                    _defer_by=100)
+    job = await request.app.state.redis.enqueue_job('say_hi', name="wutong", _queue_name="pai:queue", _job_try=2, _defer_by=100)
     job_ = await job.info()
+    # await job.abort()
     return job_
 
 

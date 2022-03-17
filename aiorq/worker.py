@@ -484,7 +484,7 @@ class Worker:
                     t.add_done_callback(lambda _: self.sem.release())
                     self.tasks[job_id] = t
 
-    # 运行工作任务
+    # 运行任务
     async def run_job(self, job_id: str, score: int, worker_name: str) -> None:  # noqa: C901
         start_ms = timestamp_ms()
         async with self.pool.pipeline(transaction=True) as pipe:
@@ -522,12 +522,13 @@ class Worker:
             )
             await asyncio.shield(self.finish_failed_job(job_id, result_data_))
 
-        # 任务id 失效
+        # 任务id 失效, 直接调用错误
         if not v:
             logger.warning('job %s expired', job_id)
             return await job_failed(JobExecutionFailed('job expired'))
 
         try:
+            # 反序列化取出 function_name, args, kwargs, enqueue_job_try, enqueue_time_ms
             function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = deserialize_job_raw(
                 v, deserializer=self.job_deserializer
             )
@@ -535,7 +536,8 @@ class Worker:
             logger.exception('deserializing job %s failed', job_id)
             return await job_failed(e)
 
-        # 如果中断
+        # 这里是判断该方法是否已经加入、存在于中止队列中，如果在 abort_job 为 True，直接抛出 asyncio.CancelledError
+        # 因为如果调用了 abort 方法 会将其 job_id 加入到中止队列，所以这里要判断是否存在于 中止队列中
         if abort_job:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.info('%6.2fs ⊘ %s:%s aborted before start', t, job_id, function_name)
@@ -545,13 +547,13 @@ class Worker:
             # 获取方法 类型为 Function, CronJob
             function: Union[Function, CronJob] = self.functions[function_name]
         except KeyError:
-            # 不存在
+            # 不存在  预防方法 self.functions 为空列表的时候
             logger.warning('job %s, function %r not found', job_id, function_name)
             return await job_failed(JobExecutionFailed(f'function {function_name!r} not found'))
 
         # 方法中是否包含属性 next_run 有就是定时任务
         if hasattr(function, 'next_run'):
-            # 定时任务 需要 keep_in_progress
+            # 定时任务 需要 keep_in_progress (一直在进行中)
             ref = function_name
             keep_in_progress: Optional[float] = keep_cronjob_progress
         else:
@@ -560,6 +562,8 @@ class Worker:
             keep_in_progress = None
 
         # 限定工作重试次数 并产生 retry_key_prefix
+        # enqueue_job_try 任务重试次数
+        # job_try 已经重试了多少次
         if enqueue_job_try and enqueue_job_try > job_try:
             job_try = enqueue_job_try
             await self.pool.setex(retry_key_prefix + job_id, 88400, str(job_try))

@@ -123,6 +123,7 @@ class Job:
             info = await self.result_info()
             if info:
                 result = info.result
+                # print("info: ",info)
                 if info.success:
                     return result
                 elif isinstance(result, (Exception, asyncio.CancelledError)):
@@ -184,7 +185,7 @@ class Job:
         :param poll_delay:为作业结果轮询redis的频率
         :return:如果作业正确中止，则为True，否则为False
         """
-        # 设置 redis 为终止键
+        # 设置终止键
         await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
         try:
             # 尝试获取结果
