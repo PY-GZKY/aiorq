@@ -17,8 +17,9 @@ from pydantic.validators import make_arbitrary_type_validator
 
 from constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
     health_check_key_suffix, func_key
-from jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job, deserialize_func, \
-    deserialize_worker
+from jobs import Job
+from serialize import Deserializer, Serializer, deserialize_job, serialize_job, deserialize_func, deserialize_worker
+from specs import JobDef, JobResult
 from utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('aiorq.connections')
@@ -201,7 +202,6 @@ class AioRedis(Redis):  # type: ignore
         """
         v = await self.get(func_key)
         return deserialize_func(v)
-
 
     async def get_job_workers(self) -> List[Dict]:
         """

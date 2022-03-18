@@ -31,7 +31,7 @@ from constants import (
 )
 from cron import CronJob
 from exception import FailedJobs, Retry, JobExecutionFailed, RetryJob, SerializationError
-from serialize import  Serializer, Deserializer, deserialize_job_raw, serialize_result
+from serialize import Serializer, Deserializer, deserialize_job_raw, serialize_result
 from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
     get_user_name
 from version import __version__
@@ -103,7 +103,7 @@ class Worker:
     :参数永远保存结果:是否永远保存结果
     :param poll_delay:轮询队列以获取新作业之间的持续时间
     :param queue_read_limit:每次轮询队列时从队列中提取的最大作业数；默认情况下等于“最大工作”``
-    :param max_trytes:默认重试作业的最大次数
+    :param max_tries:默认重试作业的最大次数
     :param health_check_interval:设置健康检查键的频率
     :param health_check_key:设置健康检查的redis键
     :param ctx:保存额外用户定义状态的字典
@@ -111,7 +111,7 @@ class Worker:
     :param allow_abort_jobs:是否在调用:func:aiorq时中止作业。乔布斯。工作流产
     :param max_burst_jobs:在突发模式下要处理的最大作业数（使用负值禁用）
     :param job_serializer:将Python对象序列化为字节的函数,默认为pickle。倾倒
-    :param job_反序列化器:将字节反序列化为Python对象的函数,默认为pickle。荷载
+    :param job_deserializer:将字节反序列化为Python对象的函数,默认为pickle。荷载
     """
 
     def __init__(
@@ -205,6 +205,7 @@ class Worker:
         self.jobs_complete = 0
         self.jobs_retried = 0
         self.jobs_failed = 0
+        self.j_ongoing = 0
         self._last_health_check: float = 0
         self._last_health_check_log: Optional[str] = None
 
@@ -665,19 +666,21 @@ class Worker:
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
-                pipe.expire(in_progress_key, keep_in_progress)
+                pipe.expire(in_progress_key, to_ms(keep_in_progress))
 
             if finish:
                 if result_data:
                     # print(result_data)
-                    expire = 0 if keep_result_forever else result_timeout_s
-                    pipe.psetex(result_key_prefix + job_id, to_ms(expire), result_data)
+                    expire = None if keep_result_forever else result_timeout_s
+                    pipe.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 pipe.zrem(abort_jobs_ss, job_id)
                 pipe.zrem(self.queue_name, job_id)
             elif incr_score:
                 pipe.zincrby(self.queue_name, incr_score, job_id)
-            pipe.delete(*delete_keys)
+
+            if delete_keys:
+                pipe.delete(*delete_keys)
             await pipe.execute()
 
     # 失败完成工作任务
@@ -743,10 +746,15 @@ class Worker:
             # print("健康检查间隔时间", self.health_check_interval)
             return
         self._last_health_check = now_ts
-        pending_tasks = sum(not t.done() for t in self.tasks.values())
+        self.j_ongoing = sum(not t.done() for t in self.tasks.values())
         queued = await self.pool.zcard(self.queue_name)
-        info = {"j_complete": self.jobs_complete, "j_failed": self.jobs_failed, "j_retried": self.jobs_retried,
-                "j_ongoing": pending_tasks, "queued": queued}
+        info = {
+            "j_complete": self.jobs_complete,
+            "j_failed": self.jobs_failed,
+            "j_retried": self.jobs_retried,
+            "j_ongoing": self.j_ongoing,
+            "queued": queued
+        }
         print("健康检查:", info)
         await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), json.dumps(info))
 
@@ -782,8 +790,13 @@ class Worker:
             return
 
         # redis 键设置为 删除或者延迟  默认一周
-        worker_ = dict(is_action=False, queue_name=self.queue_name,
-                       worker_name=self.worker_name, enqueue_time=timestamp_ms())
+        worker_ = dict(
+            is_action=False,
+            queue_name=self.queue_name,
+            worker_name=self.worker_name,
+            functions=[],
+            enqueue_time=timestamp_ms()
+        )
         await self.pool.psetex(f'{worker_key}:{self.worker_name}',
                                int(worker_key_close_expire * 1000),
                                json.dumps(worker_))
@@ -800,7 +813,7 @@ class Worker:
     def __repr__(self) -> str:
         return (
             f'<Worker j_complete={self.jobs_complete} j_failed={self.jobs_failed} j_retried={self.jobs_retried} '
-            f'j_ongoing={sum(not t.done() for t in self.tasks.values())}>'
+            f'j_ongoing={self.j_ongoing}>'
         )
 
 

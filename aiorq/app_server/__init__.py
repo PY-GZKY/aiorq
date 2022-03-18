@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-import os
 
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
 
 from aiorq import create_pool
-from aiorq.app_server.api import api_v1_router
+from aiorq.app_server.v1 import api_v1_router
 from aiorq.app_server.config import settings
 from aiorq.app_server.db.mongodb_ import mongodb_
 from aiorq.app_server.logger import logger

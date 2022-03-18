@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, List, Optional
 
-from jobs import JobResult
+from specs import JobResult
 from utils import to_ms
 
 if TYPE_CHECKING:

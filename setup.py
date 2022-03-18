@@ -47,14 +47,14 @@ setup(
     url='https://github.com/PY-GZKY/aiorq',
     license='MIT',
     packages=['aiorq'],
-    package_data={'aiorq': ['py.typed']},
+    # package_data={'aiorq': ['py.typed']},
     zip_safe=True,
     entry_points="""
         [console_scripts]
         aiorq=aiorq.cli:cli
     """,
     install_requires=[
-        'aioredis>=1.1.0,<2.0.0',
+        'aioredis>=2.0.0',
         'click>=6.7',
         'pydantic>=1',
         'dataclasses>=0.6;python_version == "3.8"',

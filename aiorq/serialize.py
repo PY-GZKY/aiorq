@@ -2,14 +2,14 @@ import json
 import logging
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from exception import SerializationError, DeserializationError
 from specs import JobWorker, JobFunc, JobDef, JobResult
 from utils import ms_to_datetime
-from exception import SerializationError,DeserializationError
-logger = logging.getLogger('aiorq.jobs')
+
+logger = logging.getLogger('aiorq.serialize')
 
 Serializer = Callable[[Dict[str, Any]], bytes]
 Deserializer = Callable[[bytes], Dict[str, Any]]
-
 
 
 def serialize_job(

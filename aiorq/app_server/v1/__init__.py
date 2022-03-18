@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from aiorq.app_server.api.v1.index import router as index_router
-from aiorq.app_server.api.v1.job import router as job_router
+from aiorq.app_server.v1.index import router as index_router
+from aiorq.app_server.v1.job import router as job_router
 
 api_v1_router = APIRouter()
 
