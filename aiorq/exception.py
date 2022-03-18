@@ -48,3 +48,11 @@ class FailedJobs(RuntimeError):
 
 class RetryJob(RuntimeError):
     pass
+
+
+class SerializationError(RuntimeError):
+    pass
+
+
+class DeserializationError(SerializationError):
+    pass

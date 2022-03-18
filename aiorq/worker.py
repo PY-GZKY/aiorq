@@ -25,12 +25,13 @@ from constants import (
     result_key_prefix,
     retry_key_prefix,
     worker_key,
-    worker_key_close_expire, default_worker_name, func_key
-
+    worker_key_close_expire,
+    default_worker_name,
+    func_key
 )
 from cron import CronJob
-from exception import FailedJobs, Retry, JobExecutionFailed, RetryJob
-from jobs import Deserializer, SerializationError, Serializer, deserialize_job_raw, serialize_result
+from exception import FailedJobs, Retry, JobExecutionFailed, RetryJob, SerializationError
+from serialize import  Serializer, Deserializer, deserialize_job_raw, serialize_result
 from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
     get_user_name
 from version import __version__
