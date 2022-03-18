@@ -18,11 +18,11 @@ See [documentation](https://aiorq.readthedocs.io) for more details.
 - aioredis >= 2.0.0
 
 ## Install
+~~pip install aiorq~~
 
-```shell
-pip install aiorq
+<!-- ```shell
 pip install aioredis
-```
+``` -->
 
 ## Quick Start
 
