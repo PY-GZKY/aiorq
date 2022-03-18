@@ -99,8 +99,11 @@ starting...
 ## Integration in FastAPI
 
 ## Dashboard
+- fastapi >= 0.5.0
+- motor >= 2.0.0
 
-- [aiorq dashboard](https://github.com/PY-GZKY/aiorq-dashboard) 
+See [aiorq dashboard](https://github.com/PY-GZKY/aiorq-dashboard) for more details.
+ 
 
 ## Thanks
 

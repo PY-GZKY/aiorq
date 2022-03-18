@@ -191,7 +191,7 @@ class AioRedis(Redis):  # type: ignore
         """
         获取所有工作结果
         """
-        keys = await self.keys(result_key_prefix + '*')
+        keys = await self.keys(f'{result_key_prefix}*')
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
         return sorted(results, key=attrgetter('enqueue_time'))
 
@@ -207,7 +207,7 @@ class AioRedis(Redis):  # type: ignore
         """
         获取所有工作者
         """
-        keys = await self.keys(worker_key + '*')
+        keys = await self.keys(f'{worker_key}*')
         workers_ = []
         for key_ in keys:
             v = await self.get(key_)

@@ -155,10 +155,7 @@ class Job:
         这里会立即返回结果  如果还没有结果 那就返回 None
         """
         v = await self._redis.get(result_key_prefix + self.job_id)
-        if v:
-            return deserialize_result(v, deserializer=self._deserializer)
-        else:
-            return None
+        return deserialize_result(v, deserializer=self._deserializer) if v else None
 
     async def status(self) -> JobStatus:
         """

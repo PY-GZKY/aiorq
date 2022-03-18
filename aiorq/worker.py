@@ -199,11 +199,7 @@ class Worker:
             else:
                 raise ValueError('If queue_name is absent, redis_pool must be present.')
         self.queue_name = f'{queue_name}'
-        if worker_name:
-            self.worker_name = f'{worker_name}'
-        else:
-            self.worker_name = f'{get_user_name()}'
-
+        self.worker_name = f'{worker_name}' if worker_name else f'{get_user_name()}'
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
             assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
@@ -334,11 +330,10 @@ class Worker:
         if max_burst_jobs is not None:
             self.max_burst_jobs = max_burst_jobs
         await self.async_run()
-        if self.jobs_failed:
-            failed_job_results = [r for r in await self.pool.all_job_results() if not r.success]
-            raise FailedJobs(self.jobs_failed, failed_job_results)
-        else:
+        if not self.jobs_failed:
             return self.jobs_complete
+        failed_job_results = [r for r in await self.pool.all_job_results() if not r.success]
+        raise FailedJobs(self.jobs_failed, failed_job_results)
 
     # 方法变属性而已
     @property
@@ -615,14 +610,13 @@ class Worker:
             'enqueue_time': ms_to_datetime(enqueue_time_ms),
             'score': score,
         }
-        # 合并上小文
         ctx = {**self.ctx, **job_ctx}
         start_ms = timestamp_ms()
         success = False
         try:
             s = args_to_string(args, kwargs)
             extra = f' job_try={job_try}' if job_try > 1 else ''
-            print(f"启动时间是: {start_ms} ")
+            # print(f"启动时间是: {start_ms} ")
             if (start_ms - score) > 1200:
                 extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)

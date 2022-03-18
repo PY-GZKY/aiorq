@@ -18,7 +18,12 @@ async def say_hi(ctx, name) -> None:
 
 
 async def startup(ctx):
-    print("starting... done")
+    print(ctx)
+    r_ = ctx['redis']
+    redis_info = await r_.info(section='Server')
+    print(f'redis {redis_info.get("redis_version")} for {redis_info.get("os")}')
+
+
 
 
 async def shutdown(ctx):
