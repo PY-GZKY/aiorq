@@ -345,14 +345,13 @@ class Worker:
 
         async with self.sem:  # 在我们有空间运行作业之前,不要 zrangebyscore
             now = timestamp_ms()
-            # 巧妙
-            # 用到了 zrangebyscore 属性，获取一组区间值，如果 执行时间（score）在此区间内才能取出任务job_ids
+            # 巧妙de用到了 zrangebyscore 属性，获取一组区间值，如果 执行时间（score）在此区间内才能取出任务job_ids
             # print(f"获取到最大区间：{now}  数量：{count}")
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now)
             # print(f"获取到一组 jobs: {job_ids}")
 
-        # 任务开始工作 根据 job_ids
+        # 任务开始工作
         await self.start_jobs(job_ids, worker_name)
 
         # 如果允许中断
@@ -404,7 +403,7 @@ class Worker:
         对于每个作业id,获取作业定义,检查它是否未运行,并在任务中启动它
         """
         for job_id_b in job_ids:
-            # 获取一个 锁 这里为什么要这么设计呢
+            # 获取一个锁 这里为什么要这么设计呢
             await self.sem.acquire()
             # 产生正在运行的 in_progress_key_prefix
             job_id = job_id_b.decode()

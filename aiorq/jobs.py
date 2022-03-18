@@ -47,8 +47,6 @@ class JobWorker:
 class JobFunc:
     function_name: str
     coroutine_name: str
-    # args: Tuple[Any, ...]
-    # kwargs: Dict[str, Any]
     enqueue_time: datetime
     is_timer: bool
 
@@ -65,7 +63,6 @@ class JobDef:
     def __post_init__(self) -> None:
         if isinstance(self.score, float):
             self.score = int(self.score)
-        # self.enqueue_time = self.enqueue_time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass

@@ -2,7 +2,7 @@ import asyncio
 import getpass
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
 
@@ -111,6 +111,3 @@ def get_user_name():
 
 def gen_uuid():
     return str(uuid.uuid4())
-
-
-
