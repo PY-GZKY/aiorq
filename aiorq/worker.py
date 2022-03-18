@@ -29,8 +29,8 @@ from constants import (
 
 )
 from cron import CronJob
-from jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result, \
-    JobWorker
+from exception import FailedJobs, Retry, JobExecutionFailed, RetryJob
+from jobs import Deserializer, SerializationError, Serializer, deserialize_job_raw, serialize_result
 from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
     get_user_name
 from version import __version__
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger('aiorq.worker')
 no_result = object()
-
 
 
 @dataclass
@@ -64,7 +63,6 @@ def func(
 ) -> Function:
     """
     Wrapper for a job function which lets you configure more settings.
-
     :param coroutine: coroutine function to call, can be a string to import
     :param name: name for function, if None, ``coroutine.__qualname__`` is used
     :param keep_result: duration to keep the result for, if 0 the result is not kept
@@ -84,61 +82,14 @@ def func(
     assert asyncio.iscoroutinefunction(coroutine_), f'{coroutine_} is not a coroutine function'
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
-
     return Function(name or coroutine_.__qualname__, coroutine_, timeout, keep_result, keep_result_forever, max_tries)
-
-
-# 重试类 派生于 RuntimeError
-class Retry(RuntimeError):
-    """
-    重试作业的特殊异常（如果尚未达到最大重试次数）。
-    :param defer:重新运行作业之前等待的持续时间
-    """
-
-    def __init__(self, defer: Optional['SecondsTimedelta'] = None):
-        self.defer_score: Optional[int] = to_ms(defer)
-
-    def __repr__(self) -> str:
-        return f'<Retry defer {(self.defer_score or 0) / 1000:0.2f}s>'
-
-    def __str__(self) -> str:
-        return repr(self)
-
-
-# 工作失败异常类
-class JobExecutionFailed(RuntimeError):
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, JobExecutionFailed):
-            return self.args == other.args
-        return False
-
-
-class FailedJobs(RuntimeError):
-    def __init__(self, count: int, job_results: List[JobResult]):
-        self.count = count
-        self.job_results = job_results
-
-    def __str__(self) -> str:
-        if self.count == 1 and self.job_results:
-            exc = self.job_results[0].result
-            return f'1 job failed {exc!r}'
-        else:
-            return f'{self.count} jobs failed:\n' + '\n'.join(repr(r.result) for r in self.job_results)
-
-    def __repr__(self) -> str:
-        return f'<{str(self)}>'
-
-
-class RetryJob(RuntimeError):
-    pass
 
 
 class Worker:
     """
-    运行作业的主类
-    :param functions:要注册的函数列表,可以是原始协同例程函数,也可以是结果:func:`aiorq。工人func`。
+    :param functions:要注册的函数列表,可以是原始协同例程函数。
     :param queue_name:从中获取作业的队列名称
-    :param cron_jobs:要运行的cron jobs列表,使用:func:`aiorq。克朗。cron`创建它们
+    :param cron_jobs:要运行的cron jobs列表
     :param redis_settings:用于创建redis连接的设置
     :param redis_pool:现有redis pool,通常无
     :param burst:所有作业运行后是否停止工作进程
@@ -275,14 +226,13 @@ class Worker:
 
     async def _set_worker(self, _pool, worker_name):
         worker_ = {
-            'queue_name':self.queue_name,
-            'worker_name':worker_name,
+            'queue_name': self.queue_name,
+            'worker_name': worker_name,
             'functions': list(self.functions.keys()),
             'enqueue_time': timestamp_ms(),
-            'is_action':True
+            'is_action': True
         }
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_))
-
 
     async def _set_functions(self, _pool):
         _ = []
@@ -292,10 +242,9 @@ class Worker:
                 "coroutine_name": f_.coroutine.__qualname__,
                 "enqueue_time": timestamp_ms()
             }
-            function_.update({"is_timer":True}) if isinstance(f_, CronJob) else function_.update({"is_timer": False})
+            function_.update({"is_timer": True}) if isinstance(f_, CronJob) else function_.update({"is_timer": False})
             _.append(function_)
         await _pool.set(f'{func_key}', json.dumps(_))
-
 
     def run(self) -> None:
         """
@@ -557,13 +506,12 @@ class Worker:
             logger.warning('job %s, function %r not found', job_id, function_name)
             return await job_failed(JobExecutionFailed(f'function {function_name!r} not found'))
 
-        # 方法中是否包含属性 next_run 有就是定时任务
+        # 包含属性 next_run 有就是定时任务
         if hasattr(function, 'next_run'):
             # 定时任务 需要 keep_in_progress (一直在进行中)
             ref = function_name
             keep_in_progress: Optional[float] = keep_cronjob_progress
         else:
-            # 非定时任务 keep_in_progress 为 None
             ref = f'{job_id}:{function_name}'
             keep_in_progress = None
 
@@ -603,7 +551,7 @@ class Worker:
         finish = False
         timeout_s = self.job_timeout_s if function.timeout_s is None else function.timeout_s
         incr_score: Optional[int] = None
-        # print("合并上下文 job_ctx!~")
+        # print("合并上下文 ctx !~")
         job_ctx = {
             'job_id': job_id,
             'job_try': job_try,
@@ -641,7 +589,7 @@ class Worker:
         except (Exception, asyncio.CancelledError) as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
-            
+
             if self.retry_jobs and isinstance(e, Retry):
                 incr_score = e.defer_score
                 logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (e.defer_score or 0) / 1000)
@@ -662,42 +610,44 @@ class Worker:
                 finish = True
             self.jobs_failed += 1
         else:
-            success = True
+            success, finish = True, True
             finished_ms = timestamp_ms()
-            logger.info('%6.2fs ← %s ● %s', (finished_ms - start_ms) / 1000, ref, result_str)
-            finish = True
             self.jobs_complete += 1
+            logger.info('%6.2fs ← %s ● %s', (finished_ms - start_ms) / 1000, ref, result_str)
 
-        keep_result_forever = (
-            self.keep_result_forever if function.keep_result_forever is None else function.keep_result_forever
-        )
-        result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
-        result_data = None
-        if result is not no_result and (keep_result_forever or result_timeout_s > 0):
-            result_data = serialize_result(
-                function_name,
-                args,
-                kwargs,
-                job_try,
-                enqueue_time_ms,
-                success,
-                result,
-                start_ms,
-                finished_ms,
-                ref,
-                self.queue_name,
-                worker_name,
-                serializer=self.job_serializer,
+        async def complete_job():
+            keep_result_forever = (
+                self.keep_result_forever if function.keep_result_forever is None else function.keep_result_forever
+            )
+            result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
+            result_data = None
+            if result is not no_result and (keep_result_forever or result_timeout_s > 0):
+                result_data = serialize_result(
+                    function_name,
+                    args,
+                    kwargs,
+                    job_try,
+                    enqueue_time_ms,
+                    success,
+                    result,
+                    start_ms,
+                    finished_ms,
+                    ref,
+                    self.queue_name,
+                    worker_name,
+                    serializer=self.job_serializer,
+                )
+
+            await asyncio.shield(
+                self.finish_complete_job(
+                    job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score, keep_in_progress
+                )
             )
 
-        await asyncio.shield(
-            self.finish_job(
-                job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score, keep_in_progress
-            )
-        )
+        await complete_job()
 
-    # 正常完成工作任务
-    async def finish_job(
+    # 完成任务
+    async def finish_complete_job(
             self,
             job_id: str,
             finish: bool,
@@ -832,7 +782,8 @@ class Worker:
             return
 
         # redis 键设置为 删除或者延迟  默认一周
-        worker_ = dict(is_action=False, queue_name=self.queue_name, worker_name=self.worker_name,enqueue_time=timestamp_ms())
+        worker_ = dict(is_action=False, queue_name=self.queue_name,
+                       worker_name=self.worker_name, enqueue_time=timestamp_ms())
         await self.pool.psetex(f'{worker_key}:{self.worker_name}',
                                int(worker_key_close_expire * 1000),
                                json.dumps(worker_))
