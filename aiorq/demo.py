@@ -54,6 +54,6 @@ class WorkerSettings:
 
     allow_abort_jobs = True
 
-    worker_name = "pai"
+    # worker_name = "pai"
 
     queue_name = "pai:queue"

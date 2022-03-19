@@ -2,7 +2,9 @@ import asyncio
 import inspect
 import json
 import logging
+import os
 import signal
+import socket
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
@@ -32,8 +34,7 @@ from constants import (
 from cron import CronJob
 from exception import FailedJobs, Retry, JobExecutionFailed, RetryJob, SerializationError
 from serialize import Serializer, Deserializer, deserialize_job_raw, serialize_result
-from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate, \
-    get_user_name
+from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 from version import __version__
 
 if TYPE_CHECKING:
@@ -150,8 +151,8 @@ class Worker:
                 queue_name = redis_pool.default_queue_name
             else:
                 raise ValueError('If queue_name is absent, redis_pool must be present.')
-        self.queue_name = f'{queue_name}'
-        self.worker_name = f'{worker_name}' if worker_name else f'{get_user_name()}'
+        self.queue_name = queue_name
+        self.worker_name = worker_name if worker_name else self.name
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
             assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
@@ -226,7 +227,13 @@ class Worker:
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
 
-    async def _set_worker(self, _pool, worker_name):
+    @property
+    def name(self):
+        hostname = socket.gethostname()
+        shortname, _, _ = hostname.partition('.')
+        return f'{shortname}.{os.getpid()}'
+
+    async def _set_worker_state(self, _pool, worker_name):
         worker_ = {
             'queue_name': self.queue_name,
             'worker_name': worker_name,
@@ -236,7 +243,7 @@ class Worker:
         }
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_))
 
-    async def _set_functions(self, _pool):
+    async def _set_functions_state(self, _pool):
         _ = []
         for name, f_ in self.functions.items():
             function_ = {
@@ -301,8 +308,8 @@ class Worker:
             )
 
         # 设置 redis 值
-        await self._set_worker(_pool=self._pool, worker_name=self.worker_name)
-        await self._set_functions(_pool=self._pool)
+        await self._set_worker_state(_pool=self._pool, worker_name=self.worker_name)
+        await self._set_functions_state(_pool=self._pool)
 
         # 输出一些队列信息
         logger.info(f'Aiorq Version: {__version__}')
