@@ -57,8 +57,8 @@ async def shutdown(ctx):
     print("ending... done")
 
 
-async def run_cron(ctx, time_='2021-11-16 10:26:05'):
-    print(time_)
+async def run_cron(ctx, name_):
+    return f"hello {name_}"
 
 
 class WorkerSettings:
@@ -76,7 +76,7 @@ class WorkerSettings:
     on_shutdown = shutdown
 
     cron_jobs = [
-        cron(coroutine=run_cron, name="x100", minute=40, second=50, keep_result_forever=True)
+        cron(coroutine=run_cron, kwargs={"name_":"pai"}, hour={17, 12, 18}, minute=40, second=50, keep_result_forever=True)
     ]
 
     # allow_abort_jobs = True
