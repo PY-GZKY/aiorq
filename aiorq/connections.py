@@ -68,7 +68,7 @@ class RedisSettings:
         )
 
     def __repr__(self) -> str:
-        return 'RedisSettings({})'.format(', '.join(f'{k}={v!r}' for k, v in self.__dict__.items()))
+        return f"RedisSettings({', '.join((f'{k}={v!r}' for k, v in self.__dict__.items()))})"
 
 
 # extra time after the job is expected to start when the job key should expire, 1 day in ms
