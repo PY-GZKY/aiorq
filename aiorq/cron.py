@@ -1,8 +1,9 @@
+from ast import keyword
 import asyncio
 import dataclasses
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from pydantic.utils import import_string
 
@@ -30,7 +31,7 @@ def next_cron(
     hour: OptionType = None,
     minute: OptionType = None,
     second: OptionType = 0,
-    microsecond: int = 123_456,
+    microsecond: int = 123_456
 ) -> datetime:
     """
     Find the next datetime matching the given parameters.
@@ -39,7 +40,13 @@ def next_cron(
     if isinstance(weekday, str):
         weekday = WEEKDAYS.index(weekday.lower())
     options = Options(
-        month=month, day=day, weekday=weekday, hour=hour, minute=minute, second=second, microsecond=microsecond
+        month=month,
+        day=day,
+        weekday=weekday,
+        hour=hour,
+        minute=minute,
+        second=second,
+        microsecond=microsecond
     )
 
     while True:
@@ -54,10 +61,7 @@ def _get_next_dt(dt_: datetime, options: Options) -> Optional[datetime]:  # noqa
     for field, v in dataclasses.asdict(options).items():
         if v is None:
             continue
-        if field == 'weekday':
-            next_v = dt_.weekday()
-        else:
-            next_v = getattr(dt_, field)
+        next_v = dt_.weekday() if field == 'weekday' else getattr(dt_, field)
         if isinstance(v, int):
             mismatch = next_v != v
         else:
@@ -93,6 +97,7 @@ def _get_next_dt(dt_: datetime, options: Options) -> Optional[datetime]:  # noqa
 class CronJob:
     name: str
     coroutine: WorkerCoroutine
+    kwargs: Dict[Any, Any]
     month: OptionType
     day: OptionType
     weekday: WeekdayOptionType
@@ -108,6 +113,8 @@ class CronJob:
     max_tries: Optional[int]
     next_run: Optional[datetime] = None
 
+
+
     def calculate_next(self, prev_run: datetime) -> None:
         self.next_run = next_cron(
             prev_run,
@@ -117,17 +124,18 @@ class CronJob:
             hour=self.hour,
             minute=self.minute,
             second=self.second,
-            microsecond=self.microsecond,
+            microsecond=self.microsecond
         )
 
     def __repr__(self) -> str:
-        return '<CronJob {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
+        return f"<CronJob {' '.join((f'{k}={v}' for k, v in self.__dict__.items()))}>"
 
 
 def cron(
     coroutine: Union[str, WorkerCoroutine],
     *,
     name: Optional[str] = None,
+    kwargs: dict,
     month: OptionType = None,
     day: OptionType = None,
     weekday: WeekdayOptionType = None,
@@ -140,7 +148,7 @@ def cron(
     timeout: Optional[SecondsTimedelta] = None,
     keep_result: Optional[float] = 0,
     keep_result_forever: Optional[bool] = False,
-    max_tries: Optional[int] = 1,
+    max_tries: Optional[int] = 1
 ) -> CronJob:
     """
     Create a cron job, eg. it should be executed at specific times.
@@ -167,7 +175,8 @@ def cron(
     """
 
     if isinstance(coroutine, str):
-        name = name or 'cron:' + coroutine
+        name = name or coroutine
+        # print("coroutine: ", coroutine)
         coroutine_: WorkerCoroutine = import_string(coroutine)
     else:
         coroutine_ = coroutine
@@ -177,8 +186,9 @@ def cron(
     keep_result = to_seconds(keep_result)
 
     return CronJob(
-        name or 'cron:' + coroutine_.__qualname__,
+        name or coroutine_.__qualname__,
         coroutine_,
+        kwargs,
         month,
         day,
         weekday,
@@ -191,5 +201,5 @@ def cron(
         timeout,
         keep_result,
         keep_result_forever,
-        max_tries,
+        max_tries
     )

@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from unicodedata import name
 from cron import cron
 from connections import RedisSettings
 
@@ -28,8 +29,10 @@ async def shutdown(ctx):
 
 
 
-async def run_regularly(ctx):
-    print('run foo job at 9.12am, 12.12pm and 6.12pm')
+async def run_regularly(ctx,name_):
+    print(f'run regularly {name_}')
+    return f'hello {name_}'
+
 
 class WorkerSettings:
     redis_settings = RedisSettings(
@@ -42,7 +45,8 @@ class WorkerSettings:
     functions = [say_hello, say_hi]
 
     cron_jobs = [
-        cron(run_regularly, hour={17, 12, 18}, minute=12)
+        cron(name="run_regularly_", coroutine=run_regularly, kwargs={"name_":"wutong"}, hour={17, 12, 18}, minute=35),
+        # cron("demo.run_regularly", hour={15, 12, 18}, minute=50)
     ]
 
     on_startup = startup
@@ -50,7 +54,7 @@ class WorkerSettings:
     on_shutdown = shutdown
 
     allow_abort_jobs = True
-
-    # worker_name = "pai"
+# 
+    worker_name = "pai"
 
     queue_name = "pai:queue"

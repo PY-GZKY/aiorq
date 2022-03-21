@@ -41,13 +41,11 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     if check:
         # 健康检查
         exit(check_health(worker_settings_))
+    elif watch:
+        asyncio.get_event_loop().run_until_complete(watch_reload(watch, worker_settings_))
     else:
         kwargs = {} if burst is None else {'burst': burst}
-        # 热启动
-        if watch:
-            asyncio.get_event_loop().run_until_complete(watch_reload(watch, worker_settings_))
-        else:
-            run_worker(worker_settings_, **kwargs)
+        run_worker(worker_settings_, **kwargs)
 
 
 async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None:

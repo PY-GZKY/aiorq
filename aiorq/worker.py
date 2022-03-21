@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 
 from aioredis.exceptions import ResponseError, WatchError
 from pydantic.utils import import_string
-
+import dataclasses
+from specs import JobFunc
 from connections import RedisSettings, create_pool, log_redis_info, AioRedis
 from constants import (
     abort_job_max_age,
@@ -36,6 +37,7 @@ from exception import FailedJobs, Retry, JobExecutionFailed, RetryJob, Serializa
 from serialize import Serializer, Deserializer, deserialize_job_raw, serialize_result
 from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 from version import __version__
+from specs import JobWorker
 
 if TYPE_CHECKING:
     from typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
@@ -152,7 +154,7 @@ class Worker:
             else:
                 raise ValueError('If queue_name is absent, redis_pool must be present.')
         self.queue_name = queue_name
-        self.worker_name = worker_name if worker_name else self.name
+        self.worker_name = worker_name or self.name
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
             assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
@@ -234,24 +236,26 @@ class Worker:
         return f'{shortname}.{os.getpid()}'
 
     async def _set_worker_state(self, _pool, worker_name):
-        worker_ = {
-            'queue_name': self.queue_name,
-            'worker_name': worker_name,
-            'functions': list(self.functions.keys()),
-            'enqueue_time': timestamp_ms(),
-            'is_action': True
-        }
+        w_ = JobWorker(
+            queue_name=self.queue_name,
+            worker_name=worker_name,
+            functions=list(self.functions.keys()),
+            enqueue_time=timestamp_ms(),
+            is_action=True)
+        worker_ = dataclasses.asdict(w_)
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_))
 
     async def _set_functions_state(self, _pool):
         _ = []
-        for name, f_ in self.functions.items():
-            function_ = {
-                "function_name": f_.name,
-                "coroutine_name": f_.coroutine.__qualname__,
-                "enqueue_time": timestamp_ms()
-            }
-            function_.update({"is_timer": True}) if isinstance(f_, CronJob) else function_.update({"is_timer": False})
+        for func in self.functions.values():
+            f_ = JobFunc(
+                function_name=func.name,
+                coroutine_name=func.coroutine.__qualname__,
+                enqueue_time=timestamp_ms(),
+                is_timer=isinstance(func, CronJob),
+            )
+
+            function_ = dataclasses.asdict(f_)
             _.append(function_)
         await _pool.set(f'{func_key}', json.dumps(_))
 
@@ -739,7 +743,7 @@ class Worker:
                 job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
                 job_futures.add(
                     self.pool.enqueue_job(
-                        cron_job.name, _job_id=job_id, _queue_name=self.queue_name, _defer_until=cron_job.next_run
+                        cron_job.name, **cron_job.kwargs, _job_id=job_id, _queue_name=self.queue_name, _defer_until=cron_job.next_run
                     )
                 )
                 cron_job.calculate_next(cron_job.next_run)
@@ -762,7 +766,7 @@ class Worker:
             "j_ongoing": self.j_ongoing,
             "queued": queued
         }
-        print("健康检查:", info)
+        # print("健康检查:", info)
         await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), json.dumps(info))
 
     def _add_signal_handler(self, signum: Signals, handler: Callable[[Signals], None]) -> None:
@@ -797,13 +801,14 @@ class Worker:
             return
 
         # redis 键设置为 删除或者延迟  默认一周
-        worker_ = dict(
+        w_ = JobWorker(
             is_action=False,
             queue_name=self.queue_name,
             worker_name=self.worker_name,
             functions=[],
             enqueue_time=timestamp_ms()
         )
+        worker_ = dataclasses.asdict(w_)
         await self.pool.psetex(f'{worker_key}:{self.worker_name}',
                                int(worker_key_close_expire * 1000),
                                json.dumps(worker_))
