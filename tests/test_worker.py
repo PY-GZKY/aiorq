@@ -66,7 +66,7 @@ async def test_health_check_pass(aio_redis):
 
 
 async def test_set_health_check_key(aio_redis: AioRedis, worker):
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     worker: Worker = worker(functions=[func(foobar, keep_result=0)], health_check_key='aiorq:test:health-check')
     await worker.main()
     assert sorted(await aio_redis.keys('*')) == ['aiorq:test:health-check']
@@ -112,7 +112,7 @@ async def test_handle_no_sig(caplog):
 
 async def test_job_successful(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     worker: Worker = worker(functions=[foobar])
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
@@ -132,7 +132,7 @@ async def test_job_retry(aio_redis: AioRedis, worker, caplog):
             raise Retry(defer=0.01)
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     await worker.main()
     assert worker.jobs_complete == 1
@@ -150,7 +150,7 @@ async def test_job_retry_dont_retry(aio_redis: AioRedis, worker, caplog):
         raise Retry(defer=0.01)
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     with pytest.raises(FailedJobs) as exc_info:
         await worker.run_check(retry_jobs=False)
@@ -165,7 +165,7 @@ async def test_job_retry_max_jobs(aio_redis: AioRedis, worker, caplog):
         raise Retry(defer=0.01)
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     assert await worker.run_check(max_burst_jobs=1) == 0
     assert worker.jobs_complete == 0
@@ -179,7 +179,7 @@ async def test_job_retry_max_jobs(aio_redis: AioRedis, worker, caplog):
 
 async def test_job_job_not_found(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('missing', _job_id='testing')
+    await aio_redis.enqueue_job('missing', job_id='testing')
     worker: Worker = worker(functions=[foobar])
     await worker.main()
     assert worker.jobs_complete == 0
@@ -192,7 +192,7 @@ async def test_job_job_not_found(aio_redis: AioRedis, worker, caplog):
 
 async def test_job_job_not_found_run_check(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('missing', _job_id='testing')
+    await aio_redis.enqueue_job('missing', job_id='testing')
     worker: Worker = worker(functions=[foobar])
     with pytest.raises(FailedJobs) as exc_info:
         await worker.run_check()
@@ -209,7 +209,7 @@ async def test_retry_lots(aio_redis: AioRedis, worker, caplog):
         raise Retry()
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     await worker.main()
     assert worker.jobs_complete == 0
@@ -224,7 +224,7 @@ async def test_retry_lots_without_keep_result(aio_redis: AioRedis, worker):
     async def retry(ctx):
         raise Retry()
 
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')], keep_result=0)
     await worker.main()  # Should not raise MultiExecError
 
@@ -234,7 +234,7 @@ async def test_retry_lots_check(aio_redis: AioRedis, worker, caplog):
         raise Retry()
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     with pytest.raises(FailedJobs, match='max 5 retries exceeded'):
         await worker.run_check()
@@ -247,7 +247,7 @@ async def test_cancel_error(aio_redis: AioRedis, worker, caplog):
             raise asyncio.CancelledError()
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     await worker.main()
     assert worker.jobs_complete == 1
@@ -264,7 +264,7 @@ async def test_retry_job_error(aio_redis: AioRedis, worker, caplog):
             raise RetryJob()
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('retry', _job_id='testing')
+    await aio_redis.enqueue_job('retry', job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     await worker.main()
     assert worker.jobs_complete == 1
@@ -277,7 +277,7 @@ async def test_retry_job_error(aio_redis: AioRedis, worker, caplog):
 
 async def test_job_expired(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     await aio_redis.delete(job_key_prefix + 'testing')
     worker: Worker = worker(functions=[foobar])
     assert worker.jobs_complete == 0
@@ -294,7 +294,7 @@ async def test_job_expired(aio_redis: AioRedis, worker, caplog):
 
 async def test_job_expired_run_check(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     await aio_redis.delete(job_key_prefix + 'testing')
     worker: Worker = worker(functions=[foobar])
     with pytest.raises(FailedJobs) as exc_info:
@@ -311,7 +311,7 @@ async def test_job_expired_run_check(aio_redis: AioRedis, worker, caplog):
 
 async def test_job_old(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('foobar', _job_id='testing', _defer_by=-2)
+    await aio_redis.enqueue_job('foobar', job_id='testing', defer_by=-2)
     worker: Worker = worker(functions=[foobar])
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
@@ -331,7 +331,7 @@ async def test_retry_repr():
 
 async def test_str_function(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('asyncio.sleep', _job_id='testing')
+    await aio_redis.enqueue_job('asyncio.sleep', job_id='testing')
     worker: Worker = worker(functions=['asyncio.sleep'])
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
@@ -354,7 +354,7 @@ async def test_startup_shutdown(aio_redis: AioRedis, worker):
     async def shutdown(ctx):
         calls.append('shutdown')
 
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     worker: Worker = worker(functions=[foobar], on_startup=startup, on_shutdown=shutdown)
     await worker.main()
     await worker.close()
@@ -373,7 +373,7 @@ async def error_function(ctx):
 
 async def test_exc_extra(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('error_function', _job_id='testing')
+    await aio_redis.enqueue_job('error_function', job_id='testing')
     worker: Worker = worker(functions=[error_function])
     await worker.main()
     assert worker.jobs_failed == 1
@@ -393,7 +393,7 @@ async def test_unpickleable(aio_redis: AioRedis, worker, caplog):
     async def example(ctx):
         return Foo()
 
-    await aio_redis.enqueue_job('example', _job_id='testing')
+    await aio_redis.enqueue_job('example', job_id='testing')
     worker: Worker = worker(functions=[func(example, name='example')])
     await worker.main()
 
@@ -403,7 +403,7 @@ async def test_unpickleable(aio_redis: AioRedis, worker, caplog):
 
 async def test_log_health_check(aio_redis: AioRedis, worker, caplog):
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     worker: Worker = worker(functions=[foobar], health_check_interval=0)
     await worker.main()
     await worker.main()
@@ -418,7 +418,7 @@ async def test_log_health_check(aio_redis: AioRedis, worker, caplog):
 async def test_remain_keys(aio_redis: AioRedis, worker):
     redis2 = await create_redis_pool(('localhost', 6379), encoding='utf8')
     try:
-        await aio_redis.enqueue_job('foobar', _job_id='testing')
+        await aio_redis.enqueue_job('foobar', job_id='testing')
         assert sorted(await redis2.keys('*')) == ['aiorq:job:testing', 'aiorq:queue']
         worker: Worker = worker(functions=[foobar])
         await worker.main()
@@ -431,7 +431,7 @@ async def test_remain_keys(aio_redis: AioRedis, worker):
 
 
 async def test_remain_keys_no_results(aio_redis: AioRedis, worker):
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     assert sorted(await aio_redis.keys('*')) == ['aiorq:job:testing', 'aiorq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
     await worker.main()
@@ -439,7 +439,7 @@ async def test_remain_keys_no_results(aio_redis: AioRedis, worker):
 
 
 async def test_remain_keys_keep_results_forever_in_function(aio_redis: AioRedis, worker):
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     assert sorted(await aio_redis.keys('*')) == ['aiorq:job:testing', 'aiorq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result_forever=True)])
     await worker.main()
@@ -449,7 +449,7 @@ async def test_remain_keys_keep_results_forever_in_function(aio_redis: AioRedis,
 
 
 async def test_remain_keys_keep_results_forever(aio_redis: AioRedis, worker):
-    await aio_redis.enqueue_job('foobar', _job_id='testing')
+    await aio_redis.enqueue_job('foobar', job_id='testing')
     assert sorted(await aio_redis.keys('*')) == ['aiorq:job:testing', 'aiorq:queue']
     worker: Worker = worker(functions=[func(foobar)], keep_result_forever=True)
     await worker.main()
@@ -523,16 +523,16 @@ async def test_many_jobs_expire(aio_redis: AioRedis, worker, caplog):
 
 
 async def test_repeat_job_result(aio_redis: AioRedis, worker):
-    j1 = await aio_redis.enqueue_job('foobar', _job_id='job_id')
+    j1 = await aio_redis.enqueue_job('foobar', job_id='job_id')
     assert isinstance(j1, Job)
     assert await j1.status() == JobStatus.queued
 
-    assert await aio_redis.enqueue_job('foobar', _job_id='job_id') is None
+    assert await aio_redis.enqueue_job('foobar', job_id='job_id') is None
 
     await worker(functions=[foobar]).run_check()
     assert await j1.status() == JobStatus.complete
 
-    assert await aio_redis.enqueue_job('foobar', _job_id='job_id') is None
+    assert await aio_redis.enqueue_job('foobar', job_id='job_id') is None
 
 
 async def test_queue_read_limit_equals_max_jobs(aio_redis: AioRedis, worker):
@@ -594,7 +594,7 @@ async def test_custom_queue_read_limit(aio_redis: AioRedis, worker):
 
 
 async def test_custom_serializers(aio_redis_msgpack: AioRedis, worker):
-    j = await aio_redis_msgpack.enqueue_job('foobar', _job_id='job_id')
+    j = await aio_redis_msgpack.enqueue_job('foobar', job_id='job_id')
     worker: Worker = worker(
         functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
     )
@@ -616,7 +616,7 @@ class UnpickleFails:
 
 @pytest.mark.skipif(sys.version_info < (3, 7), reason='repr(exc) is ugly in 3.6')
 async def test_deserialization_error(aio_redis: AioRedis, worker):
-    await aio_redis.enqueue_job('foobar', UnpickleFails('hello'), _job_id='job_id')
+    await aio_redis.enqueue_job('foobar', UnpickleFails('hello'), job_id='job_id')
     worker: Worker = worker(functions=[foobar])
     with pytest.raises(FailedJobs) as exc_info:
         await worker.run_check()
@@ -624,7 +624,7 @@ async def test_deserialization_error(aio_redis: AioRedis, worker):
 
 
 async def test_incompatible_serializers_1(aio_redis_msgpack: AioRedis, worker):
-    await aio_redis_msgpack.enqueue_job('foobar', _job_id='job_id')
+    await aio_redis_msgpack.enqueue_job('foobar', job_id='job_id')
     worker: Worker = worker(functions=[foobar])
     await worker.main()
     assert worker.jobs_complete == 0
@@ -633,7 +633,7 @@ async def test_incompatible_serializers_1(aio_redis_msgpack: AioRedis, worker):
 
 
 async def test_incompatible_serializers_2(aio_redis: AioRedis, worker):
-    await aio_redis.enqueue_job('foobar', _job_id='job_id')
+    await aio_redis.enqueue_job('foobar', job_id='job_id')
     worker: Worker = worker(
         functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
     )
@@ -714,7 +714,7 @@ async def test_non_burst(aio_redis: AioRedis, worker, caplog, loop):
         return v + 1
 
     caplog.set_level(logging.INFO)
-    await aio_redis.enqueue_job('foo', 1, _job_id='testing')
+    await aio_redis.enqueue_job('foo', 1, job_id='testing')
     worker: Worker = worker(functions=[func(foo, name='foo')])
     worker.burst = False
     t = loop.create_task(worker.main())
@@ -731,7 +731,7 @@ async def test_multi_exec(aio_redis: AioRedis, worker, caplog):
         return v + 1
 
     caplog.set_level(logging.DEBUG, logger='aiorq.worker')
-    await aio_redis.enqueue_job('foo', 1, _job_id='testing')
+    await aio_redis.enqueue_job('foo', 1, job_id='testing')
     worker: Worker = worker(functions=[func(foo, name='foo')])
     await asyncio.gather(*[worker.start_jobs(['testing']) for _ in range(5)])
     # debug(caplog.text)
@@ -749,7 +749,7 @@ async def test_abort_job(aio_redis: AioRedis, worker, caplog, loop):
 
     caplog.set_level(logging.INFO)
     await aio_redis.zadd(abort_jobs_ss, int(1e9), b'foobar')
-    job = await aio_redis.enqueue_job('longfunc', _job_id='testing')
+    job = await aio_redis.enqueue_job('longfunc', job_id='testing')
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0
@@ -772,7 +772,7 @@ async def test_abort_job_before(aio_redis: AioRedis, worker, caplog, loop):
 
     caplog.set_level(logging.INFO)
 
-    job = await aio_redis.enqueue_job('longfunc', _job_id='testing')
+    job = await aio_redis.enqueue_job('longfunc', job_id='testing')
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0
@@ -801,7 +801,7 @@ async def test_not_abort_job(aio_redis: AioRedis, worker, caplog, loop):
         assert await job.abort() is False
 
     caplog.set_level(logging.INFO)
-    job = await aio_redis.enqueue_job('shortfunc', _job_id='testing')
+    job = await aio_redis.enqueue_job('shortfunc', job_id='testing')
 
     worker: Worker = worker(functions=[func(shortfunc, name='shortfunc')], poll_delay=0.1)
     assert worker.jobs_complete == 0
@@ -824,7 +824,7 @@ async def test_job_timeout(aio_redis: AioRedis, worker, caplog):
         await asyncio.sleep(0.3)
 
     caplog.set_level(logging.ERROR)
-    await aio_redis.enqueue_job('longfunc', _job_id='testing')
+    await aio_redis.enqueue_job('longfunc', job_id='testing')
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], job_timeout=0.2, poll_delay=0.1)
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0

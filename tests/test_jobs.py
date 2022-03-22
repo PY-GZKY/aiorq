@@ -34,7 +34,7 @@ async def test_enqueue_job(aio_redis: AioRedis, worker, queue_name=default_queue
     async def foobar(ctx, *args, **kwargs):
         return 42
 
-    j = await aio_redis.enqueue_job('foobar', 1, 2, c=3, _queue_name=queue_name)
+    j = await aio_redis.enqueue_job('foobar', 1, 2, c=3, queue_name=queue_name)
     assert isinstance(j, Job)
     assert JobStatus.queued == await j.status()
     worker: Worker = worker(functions=[func(foobar, name='foobar')], queue_name=queue_name)

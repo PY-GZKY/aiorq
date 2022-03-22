@@ -78,8 +78,8 @@ expires_extra_ms = 86_400_000
 class AioRedis(Redis):  # type: ignore
     """
     :param redis_settings: 一个实例。连接。重新定义设置。
-    :param job_serializer:将Python对象序列化为字节的函数，默认为pickle。
-    :param job_反序列化器:将字节反序列化为Python对象的函数，默认为pickle。
+    :param job_serializer:将Python对象序列化为字节的函数,默认为pickle。
+    :param job_反序列化器:将字节反序列化为Python对象的函数,默认为pickle。
     :param default_queue_name:要使用的默认队列名称。
     :param kwargs:关键字参数
     """
@@ -106,35 +106,35 @@ class AioRedis(Redis):  # type: ignore
             self,
             function: str,
             *args: Any,
-            _job_id: Optional[str] = None,
-            _queue_name: Optional[str] = None,
-            _defer_until: Optional[datetime] = None,
-            _defer_by: Union[None, int, float, timedelta] = None,
-            _expires: Union[None, int, float, timedelta] = None,
-            _job_try: Optional[int] = None,
+            job_id: Optional[str] = None,
+            queue_name: Optional[str] = None,
+            defer_until: Optional[datetime] = None,
+            defer_by: Union[None, int, float, timedelta] = None,
+            expires: Union[None, int, float, timedelta] = None,
+            job_try: Optional[int] = None,
             **kwargs: Any,
     ) -> Optional[Job]:
         """
         Enqueue a job.
         :param function:要调用的函数的名称
         :param args:传递给函数的参数
-        :param _job_id:作业的id，可用于强制作业唯一性
-        :param _queue_name:作业的队列，可用于在不同队列中创建作业
+        :param _job_id:作业的id,可用于强制作业唯一性
+        :param _queue_name:作业的队列,可用于在不同队列中创建作业
         :param _defer_直到:运行作业的日期时间
         :param _defer_by:运行作业前等待的持续时间
-        :param _expires:如果作业在此持续时间之后仍未启动，请不要运行它
+        :param _expires:如果作业在此持续时间之后仍未启动,请不要运行它
         :param _job_try:在作业中重新排队作业时非常有用
         :param kwargs:传递给函数的任何关键字参数
         """
         # 如果 队列名称为 空使用默认名称
-        if _queue_name is None:
-            _queue_name = self.default_queue_name
-        job_id = _job_id or uuid4().hex
+        if queue_name is None:
+            queue_name = self.default_queue_name
+        job_id = job_id or uuid4().hex
         job_key = job_key_prefix + job_id
-        assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
+        assert not (defer_until and defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
 
-        defer_by_ms = to_ms(_defer_by)
-        expires_ms = to_ms(_expires)
+        defer_by_ms = to_ms(defer_by)
+        expires_ms = to_ms(expires)
 
         # self 代表类 redis 链接类
         async with self.pipeline(transaction=True) as pipe:
@@ -151,8 +151,8 @@ class AioRedis(Redis):  # type: ignore
 
             # score 是运行任务的时间
             enqueue_time_ms = timestamp_ms()
-            if _defer_until is not None:
-                score = to_unix_ms(_defer_until)
+            if defer_until is not None:
+                score = to_unix_ms(defer_until)
             elif defer_by_ms:
                 score = enqueue_time_ms + defer_by_ms
             else:
@@ -160,7 +160,7 @@ class AioRedis(Redis):  # type: ignore
 
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, _queue_name,
+            job = serialize_job(function, args, kwargs, job_try, enqueue_time_ms, queue_name,
                                 serializer=self.job_serializer)
 
             # redis 批处理执行 添加任务id到 redis 队列
@@ -168,13 +168,13 @@ class AioRedis(Redis):  # type: ignore
 
             # 如果到达 expires_ms 这个时间还未执行 redis 超市删除key 即任务取消运行
             pipe.psetex(job_key, expires_ms, job)
-            pipe.zadd(_queue_name, {job_id: score})
+            pipe.zadd(queue_name, {job_id: score})
             try:
                 await pipe.execute()
             except WatchError:
                 # job got enqueued since we checked 'job_exists'
                 return None
-        return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
+        return Job(job_id, redis=self, _queue_name=queue_name, _deserializer=self.job_deserializer)
 
     # 根据 key 获取工作结果
     async def _get_job_result(self, key: bytes) -> JobResult:

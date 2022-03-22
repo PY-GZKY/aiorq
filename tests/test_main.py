@@ -33,8 +33,8 @@ async def test_enqueue_job_different_queues(aio_redis: AioRedis, worker):
     async def foobar(ctx):
         return 42
 
-    j1 = await aio_redis.enqueue_job('foobar', _queue_name='aiorq:queue1')
-    j2 = await aio_redis.enqueue_job('foobar', _queue_name='aiorq:queue2')
+    j1 = await aio_redis.enqueue_job('foobar', queue_name='aiorq:queue1')
+    j2 = await aio_redis.enqueue_job('foobar', queue_name='aiorq:queue2')
     worker1: Worker = worker(functions=[func(foobar, name='foobar')], queue_name='aiorq:queue1')
     worker2: Worker = worker(functions=[func(foobar, name='foobar')], queue_name='aiorq:queue2')
 
@@ -98,7 +98,7 @@ async def test_enqueue_job_custom_queue(aio_redis: AioRedis, worker):
         inner_job = await ctx['redis'].enqueue_job('foobar')
         return inner_job.job_id
 
-    job = await aio_redis.enqueue_job('parent_job', _queue_name='spanner')
+    job = await aio_redis.enqueue_job('parent_job', queue_name='spanner')
 
     worker: Worker = worker(
         functions=[func(parent_job, name='parent_job'), func(foobar, name='foobar')],
@@ -139,21 +139,21 @@ async def test_job_info(aio_redis: AioRedis):
 
 
 async def test_repeat_job(aio_redis: AioRedis):
-    j1 = await aio_redis.enqueue_job('foobar', _job_id='job_id')
+    j1 = await aio_redis.enqueue_job('foobar', job_id='job_id')
     assert isinstance(j1, Job)
-    j2 = await aio_redis.enqueue_job('foobar', _job_id='job_id')
+    j2 = await aio_redis.enqueue_job('foobar', job_id='job_id')
     assert j2 is None
 
 
 async def test_defer_until(aio_redis: AioRedis):
-    j1 = await aio_redis.enqueue_job('foobar', _job_id='job_id', _defer_until=datetime(2032, 1, 1, tzinfo=timezone.utc))
+    j1 = await aio_redis.enqueue_job('foobar', job_id='job_id', defer_until=datetime(2032, 1, 1, tzinfo=timezone.utc))
     assert isinstance(j1, Job)
     score = await aio_redis.zscore(default_queue_name, 'job_id')
     assert score == 1_956_528_000_000
 
 
 async def test_defer_by(aio_redis: AioRedis):
-    j1 = await aio_redis.enqueue_job('foobar', _job_id='job_id', _defer_by=20)
+    j1 = await aio_redis.enqueue_job('foobar', job_id='job_id', defer_by=20)
     assert isinstance(j1, Job)
     score = await aio_redis.zscore(default_queue_name, 'job_id')
     ts = timestamp_ms()
@@ -173,7 +173,7 @@ async def test_mung(aio_redis: AioRedis, worker):
     tasks = []
     for i in range(50):
         tasks.extend(
-            [aio_redis.enqueue_job('count', i, _job_id=f'v-{i}'), aio_redis.enqueue_job('count', i, _job_id=f'v-{i}')]
+            [aio_redis.enqueue_job('count', i, job_id=f'v-{i}'), aio_redis.enqueue_job('count', i, job_id=f'v-{i}')]
         )
     shuffle(tasks)
     await asyncio.gather(*tasks)
@@ -193,7 +193,7 @@ async def test_custom_try(aio_redis: AioRedis, worker):
     r = await j1.result(poll_delay=0)
     assert r == 1
 
-    j2 = await aio_redis.enqueue_job('foobar', _job_try=3)
+    j2 = await aio_redis.enqueue_job('foobar', job_try=3)
     await w.main()
     r = await j2.result(poll_delay=0)
     assert r == 3
@@ -205,7 +205,7 @@ async def test_custom_try2(aio_redis: AioRedis, worker):
             raise Retry()
         return ctx['job_try']
 
-    j1 = await aio_redis.enqueue_job('foobar', _job_try=3)
+    j1 = await aio_redis.enqueue_job('foobar', job_try=3)
     w: Worker = worker(functions=[func(foobar, name='foobar')])
     await w.main()
     r = await j1.result(poll_delay=0)
@@ -277,7 +277,7 @@ async def test_get_jobs(aio_redis: AioRedis):
 
 async def test_enqueue_multiple(aio_redis: AioRedis, caplog):
     caplog.set_level(logging.DEBUG)
-    results = await asyncio.gather(*[aio_redis.enqueue_job('foobar', i, _job_id='testing') for i in range(10)])
+    results = await asyncio.gather(*[aio_redis.enqueue_job('foobar', i, job_id='testing') for i in range(10)])
     assert sum(r is not None for r in results) == 1
     assert sum(r is None for r in results) == 9
     assert 'WatchVariableError' not in caplog.text
