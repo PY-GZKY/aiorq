@@ -36,11 +36,10 @@ class FailedJobs(RuntimeError):
         self.job_results = job_results
 
     def __str__(self) -> str:
-        if self.count == 1 and self.job_results:
-            exc = self.job_results[0].result
-            return f'1 job failed {exc!r}'
-        else:
+        if self.count != 1 or not self.job_results:
             return f'{self.count} jobs failed:\n' + '\n'.join(repr(r.result) for r in self.job_results)
+        exc = self.job_results[0].result
+        return f'1 job failed {exc!r}'
 
     def __repr__(self) -> str:
         return f'<{str(self)}>'

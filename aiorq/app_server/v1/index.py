@@ -1,4 +1,6 @@
 import asyncio
+import dataclasses
+import typing
 
 from fastapi import APIRouter
 from starlette.requests import Request
@@ -38,9 +40,25 @@ async def queued_jobs(request: Request, queue_name="pai:queue"):
 
 
 @router.get("/get_job_workers", response_model=WorkerListModel)
-async def get_job_workers(request: Request):
-    results = await request.app.state.redis.get_job_workers()
-    return {"workers":results}
+async def get_job_workers(
+        request: Request,
+        worker: typing.Optional[str] = None,
+        queue: typing.Optional[str] = None,
+        is_action: bool = None
+):
+    query_ = {
+        "worker_name": worker,
+        "queue_name": queue,
+        "is_action": is_action
+    }
+    print(query_)
+    results_ = await request.app.state.redis.get_job_workers()
+    print(results_)
+    for k, v in query_.items():
+        if v is not None:
+            results_ = filter(lambda result: dataclasses.asdict(result).get(k) == v, results_)
+            results_ = list(results_)
+    return {"workers":results_}
 
 
 @router.get("/get_job_funcs")
