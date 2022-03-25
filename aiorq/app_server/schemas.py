@@ -23,7 +23,11 @@ class WorkerModel(BaseModel):
     worker_name: str
     functions: list
     is_action: bool
-    enqueue_time: datetime  # Optional[Union[float, datetime.timedelta]]
+    enqueue_time: datetime
+    health_check: Dict[str, Any]
+
+class WorkerListModel(BaseModel):
+    workers: List[WorkerModel]
 
 
 class IndecModel(BaseModel):

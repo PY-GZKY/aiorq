@@ -27,6 +27,7 @@ class JobWorker:
     functions: list
     enqueue_time: datetime
     is_action: bool
+    health_check: Dict[str, Any] = None
 
 
 @dataclass

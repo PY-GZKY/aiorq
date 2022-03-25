@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter
 from starlette.requests import Request
 
-from aiorq.app_server.schemas import IndecModel, JobDefModel, HealthCheckModel, JobDefsModel
+from aiorq.app_server.schemas import IndecModel, JobDefModel, HealthCheckModel, JobDefsModel,WorkerListModel
 
 router = APIRouter()
 
@@ -37,10 +37,10 @@ async def queued_jobs(request: Request, queue_name="pai:queue"):
     return {"rows": queued_jobs_}
 
 
-@router.get("/get_all_workers")
-async def get_all_workers(request: Request):
+@router.get("/get_job_workers", response_model=WorkerListModel)
+async def get_job_workers(request: Request):
     results = await request.app.state.redis.get_job_workers()
-    return results
+    return {"workers":results}
 
 
 @router.get("/get_job_funcs")

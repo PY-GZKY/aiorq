@@ -198,26 +198,26 @@ class AioRedis(Redis):  # type: ignore
 
     async def get_job_funcs(self) -> List[Dict]:
         """
-        获取所有任务方法
         """
         v = await self.get(func_key)
         return deserialize_func(v)
 
     async def get_job_workers(self) -> List[Dict]:
         """
-        获取所有工作者
         """
         keys = await self.keys(f'{worker_key}*')
         workers_ = []
         for key_ in keys:
             v = await self.get(key_)
-            workers_.append(deserialize_worker(v))
+            dw_ = deserialize_worker(v)
+            dw_.health_check  = await self._get_health_check(dw_.worker_name)
+            workers_.append(dw_)
         return workers_
 
     # 获取健康检查结果
     async def _get_health_check(self, worker_name: str) -> Dict:
         v = await self.get(f"{health_check_key_suffix}{worker_name}")
-        return json.loads(v)
+        return json.loads(v) if v else {}
 
     async def _get_job_def(self, job_id: bytes, score: int) -> JobDef:
         v = await self.get(job_key_prefix + job_id.decode())

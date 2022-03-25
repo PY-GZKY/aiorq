@@ -8,7 +8,7 @@ from aiorq.app_server.schemas import JobResultModel
 router = APIRouter()
 
 
-@router.get("/get_all_result", response_model=JobResultModel)
+@router.get("/all_job_results", response_model=JobResultModel)
 async def all_job_results(
         request: Request,
         worker_name: Optional[str] = None,
