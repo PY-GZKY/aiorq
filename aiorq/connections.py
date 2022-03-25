@@ -20,7 +20,7 @@ from constants import default_queue_name, default_worker_name, job_key_prefix, r
 from jobs import Job
 from serialize import Deserializer, Serializer, deserialize_job, serialize_job, deserialize_func, deserialize_worker
 from specs import JobDef, JobResult
-from utils import timestamp_ms, to_ms, to_unix_ms
+from utils import timestamp_ms, to_ms, to_unix_ms, ms_to_datetime
 
 logger = logging.getLogger('aiorq.connections')
 
@@ -95,8 +95,8 @@ class AioRedis(Redis):  # type: ignore
     ) -> None:
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
-        self.default_queue_name = default_queue_name
-        self.default_worker_name = default_worker_name
+        self.queue_name = default_queue_name
+        self.worker_name = default_worker_name
         if pool_or_conn:
             kwargs['connection_pool'] = pool_or_conn
         super().__init__(**kwargs)
@@ -128,7 +128,7 @@ class AioRedis(Redis):  # type: ignore
         """
         # 如果 队列名称为 空使用默认名称
         if queue_name is None:
-            queue_name = self.default_queue_name
+            queue_name = self.queue_name
         job_id = job_id or uuid4().hex
         job_key = job_key_prefix + job_id
         assert not (defer_until and defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
@@ -210,29 +210,36 @@ class AioRedis(Redis):  # type: ignore
         for key_ in keys:
             v = await self.get(key_)
             dw_ = deserialize_worker(v)
-            dw_.health_check  = await self._get_health_check(dw_.worker_name)
+            dw_.health_check = await self._get_health_check(dw_.worker_name)
             workers_.append(dw_)
         return workers_
 
-    # 获取健康检查结果
     async def _get_health_check(self, worker_name: str) -> Dict:
         v = await self.get(f"{health_check_key_suffix}{worker_name}")
         return json.loads(v) if v else {}
 
-    async def _get_job_def(self, job_id: bytes, score: int) -> JobDef:
-        v = await self.get(job_key_prefix + job_id.decode())
+    async def _get_job_def(self, job_id: bytes, queue_name: str, score: int) -> JobDef:
+        job_id_ = job_id.decode()
+        v = await self.get(job_key_prefix + job_id_)
         jd = deserialize_job(v, deserializer=self.job_deserializer)
+        j = Job(job_id=job_id_, redis=self, _queue_name=queue_name)
+        state = await j.status()
+        # print("ms_to_datetime(score): ",ms_to_datetime(score))
         jd.score = score
-        jd.job_id = job_id
+        jd.job_id = job_id_
+        jd.start_time = ms_to_datetime(score)
+        jd.state = state
+        jd.queue_name = queue_name
+        jd.worker_name = self.worker_name
+        print(jd)
         return jd
 
-    # 获取正在等待队列中的任务
     async def queued_jobs(self, *, queue_name: str = default_queue_name) -> List[JobDef]:
         """
         Get information about queued, mostly useful when testing.
         """
         jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
-        return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
+        return await asyncio.gather(*[self._get_job_def(job_id, queue_name, int(score)) for job_id, score in jobs])
 
 
 async def create_pool(

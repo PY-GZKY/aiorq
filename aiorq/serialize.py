@@ -50,6 +50,11 @@ def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) ->
             job_try=d['job_try'],
             enqueue_time=ms_to_datetime(d['enqueue_time']),
             score=None,
+            state=None,
+            job_id=None,
+            start_time=None,
+            queue_name=None,
+            worker_name=None,
         )
     except Exception as e:
         raise DeserializationError('unable to deserialize job') from e
@@ -82,6 +87,7 @@ def serialize_result(
         ref: str,
         queue_name: str,
         worker_name: str,
+        job_id: str,
         *,
         serializer: Optional[Serializer] = None,
 ) -> Optional[str]:
@@ -96,7 +102,8 @@ def serialize_result(
         'start_ms': start_ms,
         'finished_ms': finished_ms,
         'queue_name': queue_name,
-        'worker_name': worker_name
+        'worker_name': worker_name,
+        'job_id':job_id
     }
     if serializer is None:
         serializer = json.dumps
@@ -131,7 +138,9 @@ def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None)
             start_time=ms_to_datetime(d['start_ms']),
             finish_time=ms_to_datetime(d['finished_ms']),
             queue_name=d.get('queue_name', '<unknown>'),
-            worker_name=d.get('worker_name', '<unknown>')
+            worker_name=d.get('worker_name', '<unknown>'),
+            job_id=d.get('job_id'),
+            state=d.get('state')
         )
     except Exception as e:
         raise DeserializationError('unable to deserialize job result') from e

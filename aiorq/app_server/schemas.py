@@ -43,6 +43,11 @@ class JobDefModel(BaseModel):
     job_try: int
     enqueue_time: datetime
     score: Optional[int]
+    state: Optional[str]
+    job_id: Optional[str]
+    start_time: Optional[datetime]
+    queue_name: Optional[str]
+    worker_name: Optional[str]
 
 class JobDefsModel(BaseModel):
     rows: List[JobDefModel]

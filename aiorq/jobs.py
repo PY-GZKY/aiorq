@@ -30,6 +30,7 @@ class Job:
             _deserializer: Optional[Deserializer] = None,
     ):
         self.job_id = job_id
+        # print("self.job_id:", self.job_id)
         self._redis = redis
         self._queue_name = _queue_name
         self._deserializer = _deserializer
@@ -100,7 +101,6 @@ class Job:
         elif await self._redis.exists(in_progress_key_prefix + self.job_id):
             return JobStatus.in_progress
         else:
-            # 任务不见了
             score = await self._redis.zscore(self._queue_name, self.job_id)
             if not score:
                 return JobStatus.not_found

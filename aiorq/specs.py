@@ -46,6 +46,12 @@ class JobDef:
     job_try: int
     enqueue_time: datetime
     score: Optional[int]
+    state: Optional[str]
+    job_id: Optional[str]
+    start_time: Optional[datetime]
+    queue_name: Optional[str]
+    worker_name: Optional[str]
+
 
     def __post_init__(self) -> None:
         if isinstance(self.score, float):
@@ -56,11 +62,7 @@ class JobDef:
 class JobResult(JobDef):
     success: bool
     result: Any
-    start_time: datetime
     finish_time: datetime
-    queue_name: str
-    worker_name: str
-    job_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         ...

@@ -485,7 +485,8 @@ class Worker:
                 ref=f'{job_id}:{function_name}',
                 serializer=self.job_serializer,
                 queue_name=self.queue_name,
-                worker_name=worker_name
+                worker_name=worker_name,
+                job_id=job_id
             )
             await asyncio.shield(self.finish_failed_job(job_id, result_data_))
 
@@ -555,6 +556,7 @@ class Worker:
                 ref,
                 self.queue_name,
                 worker_name,
+                job_id,
                 serializer=self.job_serializer,
             )
             return await asyncio.shield(self.finish_failed_job(job_id, result_data))
@@ -647,6 +649,7 @@ class Worker:
                     ref,
                     self.queue_name,
                     worker_name,
+                    job_id,
                     serializer=self.job_serializer,
                 )
 
