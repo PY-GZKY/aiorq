@@ -44,11 +44,6 @@ async def say_hello(ctx, name) -> None:
     print(f"Hello {name}")
 
 
-async def say_hi(ctx, name) -> None:
-    await asyncio.sleep(3)
-    print(f"Hi {name}")
-
-
 async def startup(ctx):
     print("starting... done")
 
@@ -69,7 +64,7 @@ class WorkerSettings:
         password=os.getenv("REDIS_PASSWORD", None)
     )
 
-    functions = [say_hello, say_hi]
+    functions = [say_hello]
 
     on_startup = startup
 
@@ -80,7 +75,6 @@ class WorkerSettings:
     ]
 
     # allow_abort_jobs = True
-
     # worker_name = "ohuo"
     # queue_name = "ohuo"
 ```
@@ -99,9 +93,6 @@ starting...
 ## Integration in FastAPI
 
 ## Dashboard
-- fastapi >= 0.5.0
-- motor >= 2.0.0
-
 See [aiorq dashboard](https://github.com/PY-GZKY/aiorq-dashboard) for more details.
  
 
