@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import socket
+import traceback
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
@@ -618,10 +619,11 @@ class Worker:
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
             else:
                 logger.exception(
-                    '%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': exc_extra}
+                    '%6.2fs ! %s failed, %s', t, ref, e.__class__.__name__, extra={'extra': exc_extra}
                 )
-                result = e
+                result = traceback.format_exc()
                 finish = True
+                success = False
             self.jobs_failed += 1
         else:
             success, finish = True, True

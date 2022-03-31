@@ -107,10 +107,10 @@ def serialize_result(
     }
     if serializer is None:
         serializer = json.dumps
-    try:
-        return serializer(data)
-    except Exception:
-        logger.warning('error serializing result of %s', ref, exc_info=True)
+    # try:
+    return serializer(data)
+    # except Exception:
+    #     logger.warning('error serializing result of %s', ref, exc_info=True)
 
     # use string in case serialization fails again
     data.update(r='unable to serialize result', s=False)

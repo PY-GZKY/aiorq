@@ -4,16 +4,31 @@ from typing import Optional
 from fastapi import APIRouter
 from starlette.requests import Request
 
-from aiorq.jobs import Job
 from aiorq.app_server.schemas import JobResultModel, JobDefsModel
 
 router = APIRouter()
 
 
 @router.get("/queued_jobs", response_model=JobDefsModel)
-async def queued_jobs(request: Request, queue_name="pai:queue"):
-    queued_jobs_ = await request.app.state.redis.queued_jobs(queue_name=queue_name)
-    return {"rows": queued_jobs_}
+async def queued_jobs(
+        request: Request,
+        queue_name: str = "pai:queue",
+        worker_name: str = None,
+        function: str = None,
+        job_id: str = None,
+        state: str = None
+):
+    results_ = await request.app.state.redis.queued_jobs(queue_name=queue_name)
+    if worker_name:
+        results_ = filter(lambda result: worker_name in dataclasses.asdict(result).get("worker_name"), results_)
+    if function:
+        results_ = filter(lambda result: function in dataclasses.asdict(result).get("function"), results_)
+    if job_id:
+        results_ = filter(lambda result: job_id in dataclasses.asdict(result).get("job_id"), results_)
+    if state:
+        results_ = filter(lambda result: state == dataclasses.asdict(result).get("state"), results_)
+    return {"rows": list(results_)}
+
 
 @router.get("/results", response_model=JobResultModel)
 async def results(
@@ -25,20 +40,16 @@ async def results(
         finish_time: Optional[str] = None,
         success: bool = None,
 ):
-    query_ = {
-        "worker_name": worker_name,
-        "function": function,
-        "job_id": job_id,
-        "start_time": start_time,
-        "finish_time": finish_time,
-        "success": success
-    }
     results_ = await request.app.state.redis.all_job_results()
-    for k, v in query_.items():
-        if v:
-            results_ = filter(lambda result: dataclasses.asdict(result).get(k) == v, results_)
-            results_ = list(results_)
-    return {"rows": results_}
+    if worker_name:
+        results_ = filter(lambda result: worker_name in dataclasses.asdict(result).get("worker_name"), results_)
+    if function:
+        results_ = filter(lambda result: function in dataclasses.asdict(result).get("function"), results_)
+    if job_id:
+        results_ = filter(lambda result: job_id in dataclasses.asdict(result).get("job_id"), results_)
+    if success is not None:
+        results_ = filter(lambda result: success == dataclasses.asdict(result).get("success"), results_)
+    return {"rows": list(results_)}
 
 
 @router.delete("")

@@ -242,6 +242,11 @@ class AioRedis(Redis):  # type: ignore
         return await asyncio.gather(*[self._get_job_def(job_id, queue_name, int(score)) for job_id, score in jobs])
 
 
+    async def redis_info(self) -> Dict[str, Any]:
+        return await self.info()
+
+
+
 async def create_pool(
         settings_: RedisSettings = None,
         *,
@@ -317,7 +322,6 @@ async def create_pool(
     )
 
 
-# 日志方法
 async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:
     async with redis.pipeline(transaction=True) as pipe:
         pipe.info(section='Server')
