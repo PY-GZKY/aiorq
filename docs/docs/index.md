@@ -2,7 +2,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.7 | 3.8 | 3.9-blue" />
   <img src="https://img.shields.io/badge/license-MIT-green" />
-  <img src="https://img.shields.io/badge/pypi-v0.33-red" />
 </p>
 
 `Aiorq` 是一个包含 `asyncio` 和 `redis` 的分布式任务队列，它从 `arq` 重写以进行改进，并包含 `web` 接口。
@@ -17,8 +16,8 @@
 
 ## 依赖
 
-- `redis >= 5.0`
-- `aioredis>=1.1.0  <2.0.0`
+- `redis>=5.0`
+- `aioredis>=2.0.0`
 
 ## 安装
 
@@ -88,9 +87,7 @@ class WorkerSettings:
 
 以 `demo.py` 文件为例，文件中声明了 `say_hello`、 `say_hi`、 `run_cron` 方法、其中 `run_cron` 作为定时任务。
 
-## Worker
-
-### 启动 worker
+## 启动 worker
 
 ```shell
 > aiorq demo.WorkerSettings
@@ -99,6 +96,14 @@ class WorkerSettings:
 15:08:50: Starting Functions: say_hello
 15:08:50: redis_version=5.0.10 mem_usage=731.12K clients_connected=2 db_keys=9
 starting...
+```
+## 启动 Integration 
+```text
+> aiorq tasks.WorkerSettings server
+INFO:     Started server process [4524]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8080 (Press CTRL+C to quit)
 ```
 
 ## 任务

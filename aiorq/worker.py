@@ -164,7 +164,7 @@ class Worker:
             self.functions.update({cj.name: cj for cj in self.cron_jobs})
 
         # 方法列表 > 0
-        assert len(self.functions) > 0, 'at least one function or cron_job must be registered'
+        assert self.functions, 'at least one function or cron_job must be registered'
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown

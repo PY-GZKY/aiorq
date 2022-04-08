@@ -2,7 +2,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.7 | 3.8 | 3.9 | 3.10-blue" />
   <img src="https://img.shields.io/badge/license-MIT-green" />
-  <img src="https://img.shields.io/badge/pypi-v0.29-red" />
 </p>
 
 ## Introduction
@@ -18,11 +17,10 @@ See [documentation](https://aiorq.readthedocs.io) for more details.
 - aioredis >= 2.0.0
 
 ## Install
-~~pip install aiorq~~
 
-<!-- ```shell
-pip install aioredis
-``` -->
+```shell
+pip install aiorq
+```
 
 ## Quick Start
 
@@ -31,7 +29,6 @@ pip install aioredis
 ```python
 # demo.py
 # -*- coding: utf-8 -*-
-
 import asyncio
 import os
 
@@ -82,7 +79,7 @@ class WorkerSettings:
 ### Run aiorq worker
 
 ```text
-> aiorq tasks.WorkerSettings
+> aiorq tasks.WorkerSettings worker
 15:08:50: Starting Queue: ohuo
 15:08:50: Starting Worker: ohuo@04dce85c-1798-43eb-89d8-7c6d78919feb
 15:08:50: Starting Functions: say_hello, EnHeng
@@ -91,9 +88,16 @@ starting...
 ```
 
 ## Integration in FastAPI
+```text
+> aiorq tasks.WorkerSettings server
+INFO:     Started server process [4524]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8080 (Press CTRL+C to quit)
+```
 
 ## Dashboard
-See [aiorq dashboard](https://github.com/PY-GZKY/aiorq-dashboard) for more details.
+See [dashboard](https://github.com/PY-GZKY/aiorq-dashboard) for more details.
  
 
 ## Thanks
