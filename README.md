@@ -68,12 +68,10 @@ class WorkerSettings:
     on_shutdown = shutdown
 
     cron_jobs = [
-        cron(coroutine=run_cron, kwargs={"name_":"pai"}, hour={17, 12, 18}, minute=40, second=50, keep_result_forever=True)
+        cron(coroutine=run_cron, kwargs={"name_": "pai"}, hour={17, 12, 18}, minute=40, second=50,
+             keep_result_forever=True)
     ]
 
-    # allow_abort_jobs = True
-    # worker_name = "ohuo"
-    # queue_name = "ohuo"
 ```
 
 ### Run aiorq worker
@@ -88,6 +86,7 @@ starting...
 ```
 
 ## Integration in FastAPI
+
 ```text
 > aiorq tasks.WorkerSettings server
 INFO:     Started server process [4524]
@@ -97,8 +96,8 @@ INFO:     Uvicorn running on http://127.0.0.1:8080 (Press CTRL+C to quit)
 ```
 
 ## Dashboard
+
 See [dashboard](https://github.com/PY-GZKY/aiorq-dashboard) for more details.
- 
 
 ## Thanks
 
