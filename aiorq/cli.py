@@ -1,18 +1,21 @@
 import asyncio
-import click
 import logging.config
 import os
 import sys
-from pydantic.utils import import_string
 from signal import Signals
 from typing import TYPE_CHECKING, cast
 
-from logs import default_log_config
-from version import __version__
-from worker import check_health, create_worker, run_worker
+import click
+import uvicorn
+from pydantic.utils import import_string
+
+from .app_server.main_ import app
+from .logs import default_log_config
+from .version import __version__
+from .worker import check_health, create_worker, run_worker
 
 if TYPE_CHECKING:
-    from typing_ import WorkerSettingsType
+    from .typing_ import WorkerSettingsType
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit.'
@@ -20,13 +23,14 @@ watch_help = 'Watch a directory and reload the worker upon changes.'
 verbose_help = 'Enable verbose output.'
 
 
-@click.command('aiorq')
-@click.version_option(__version__, '-V', '--version', prog_name='aiorq')
+@click.group('aiorq', context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(__version__, '-V', '--version')
 @click.argument('worker-settings', type=str, required=True)
 @click.option('--burst/--no-burst', default=None, help=burst_help)
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('--watch', type=click.Path(exists=True, dir_okay=True, file_okay=False), help=watch_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
+@click.pass_context
 def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool) -> None:
     """
     Job queues in python with asyncio and redis.
@@ -34,18 +38,24 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     """
     sys.path.append(os.getcwd())
 
-    # cast 并无实际作用 作为类型判断 import_string(worker_settings) 字符转类型
-    worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings)) # <class 'tasks.WorkerSettings'>
+    worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings))  # <class 'tasks.WorkerSettings'>
     logging.config.dictConfig(default_log_config(verbose))
 
     if check:
-        # 健康检查
         exit(check_health(worker_settings_))
     elif watch:
         asyncio.get_event_loop().run_until_complete(watch_reload(watch, worker_settings_))
     else:
         kwargs = {} if burst is None else {'burst': burst}
         run_worker(worker_settings_, **kwargs)
+
+
+@cli.command("server", help="Start a worker.")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Listen host.")
+@click.option("--port", default=8080, show_default=True, help="Listen port.")
+@click.pass_context
+def server(host: str, port: int):
+    uvicorn.run(app=app, host=host, port=port, debug=True)
 
 
 async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None:
@@ -73,6 +83,6 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
     finally:
         await worker.close()
 
+
 if __name__ == '__main__':
-    sys.path.insert(0, ".")
     cli()

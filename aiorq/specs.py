@@ -25,7 +25,7 @@ class JobWorker:
     worker_name: str
     queue_name: str
     functions: list
-    enqueue_time: datetime
+    enqueue_time: int
     is_action: bool
     health_check: Dict[str, Any] = None
 

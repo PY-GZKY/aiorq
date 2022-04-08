@@ -28,9 +28,6 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: Unix',
         'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3 :: Only',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
@@ -47,7 +44,6 @@ setup(
     url='https://github.com/PY-GZKY/aiorq',
     license='MIT',
     packages=['aiorq'],
-    # package_data={'aiorq': ['py.typed']},
     zip_safe=True,
     entry_points="""
         [console_scripts]

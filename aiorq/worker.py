@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import inspect
 import json
 import logging
@@ -15,10 +16,9 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 
 from aioredis.exceptions import ResponseError, WatchError
 from pydantic.utils import import_string
-import dataclasses
-from specs import JobFunc
-from connections import RedisSettings, create_pool, log_redis_info, AioRedis
-from constants import (
+
+from .connections import RedisSettings, create_pool, log_redis_info, AioRedis
+from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
     default_queue_name,
@@ -33,15 +33,15 @@ from constants import (
     default_worker_name,
     func_key
 )
-from cron import CronJob
-from exception import FailedJobs, Retry, JobExecutionFailed, RetryJob, SerializationError
-from serialize import Serializer, Deserializer, deserialize_job_raw, serialize_result
-from utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
-from version import __version__
-from specs import JobWorker
+from .cron import CronJob
+from .exception import FailedJobs, Retry, JobExecutionFailed, RetryJob, SerializationError
+from .serialize import Serializer, Deserializer, deserialize_job_raw, serialize_result
+from .specs import JobWorker,JobFunc
+from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
+from .version import __version__
 
 if TYPE_CHECKING:
-    from typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from .typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('aiorq.worker')
 no_result = object()
@@ -151,7 +151,7 @@ class Worker:
 
         if queue_name is None:
             if redis_pool is not None:
-                queue_name = redis_pool.default_queue_name
+                queue_name = redis_pool.queue_name
             else:
                 raise ValueError('If queue_name is absent, redis_pool must be present.')
         self.queue_name = queue_name
@@ -241,7 +241,7 @@ class Worker:
             queue_name=self.queue_name,
             worker_name=worker_name,
             functions=list(self.functions.keys()),
-            enqueue_time=timestamp_ms(),
+            enqueue_time=ms_to_datetime(timestamp_ms()),
             is_action=True)
         worker_ = dataclasses.asdict(w_)
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_))
@@ -252,7 +252,7 @@ class Worker:
             f_ = JobFunc(
                 function_name=func.name,
                 coroutine_name=func.coroutine.__qualname__,
-                enqueue_time=timestamp_ms(),
+                enqueue_time=ms_to_datetime(timestamp_ms()),
                 is_timer=isinstance(func, CronJob),
             )
 
@@ -740,7 +740,8 @@ class Worker:
                 job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
                 job_futures.add(
                     self.pool.enqueue_job(
-                        cron_job.name, **cron_job.kwargs, job_id=job_id, queue_name=self.queue_name, defer_until=cron_job.next_run
+                        cron_job.name, **cron_job.kwargs, job_id=job_id, queue_name=self.queue_name,
+                        defer_until=cron_job.next_run
                     )
                 )
                 cron_job.calculate_next(cron_job.next_run)
@@ -803,7 +804,7 @@ class Worker:
             queue_name=self.queue_name,
             worker_name=self.worker_name,
             functions=[],
-            enqueue_time=timestamp_ms()
+            enqueue_time=ms_to_datetime(timestamp_ms())
         )
         worker_ = dataclasses.asdict(w_)
         await self.pool.psetex(f'{worker_key}:{self.worker_name}',
