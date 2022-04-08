@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
 
-from aiorq import create_pool
-from aiorq.app_server.v1 import api_v1_router
-from aiorq.app_server.config import settings
-from aiorq.app_server.db.mongodb_ import mongodb_
-from aiorq.app_server.logger import logger
-from aiorq.connections import RedisSettings
+from aiorq.connections import RedisSettings, create_pool
+from .v1 import api_v1_router
+from .config import settings
+from .db.mongodb_ import mongodb_
+from .logger import logger
+
 
 
 def create_app():
@@ -21,7 +20,7 @@ def create_app():
         # openapi_url=f"{settings.API_V1_STR}/openapi.json"
     )
 
-    register_redis(app)
+    # register_redis(app)
     # register_mongodb(app_server)
     register_cors(app)
     register_router(app)

@@ -252,7 +252,7 @@ class Worker:
             f_ = JobFunc(
                 function_name=func.name,
                 coroutine_name=func.coroutine.__qualname__,
-                enqueue_time=ms_to_datetime(timestamp_ms()),
+                enqueue_time=timestamp_ms(),
                 is_timer=isinstance(func, CronJob),
             )
 
@@ -804,7 +804,7 @@ class Worker:
             queue_name=self.queue_name,
             worker_name=self.worker_name,
             functions=[],
-            enqueue_time=ms_to_datetime(timestamp_ms())
+            enqueue_time=timestamp_ms()
         )
         worker_ = dataclasses.asdict(w_)
         await self.pool.psetex(f'{worker_key}:{self.worker_name}',

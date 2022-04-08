@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import logging.config
 import os
@@ -7,9 +8,11 @@ from typing import TYPE_CHECKING, cast
 
 import click
 import uvicorn
+from click import Context
 from pydantic.utils import import_string
 
-from .app_server.main_ import app
+from .app_server import create_app
+from .connections import create_pool
 from .logs import default_log_config
 from .version import __version__
 from .worker import check_health, create_worker, run_worker
@@ -22,29 +25,32 @@ health_check_help = 'Health Check: run a health check and exit.'
 watch_help = 'Watch a directory and reload the worker upon changes.'
 verbose_help = 'Enable verbose output.'
 
+sys.path.append(os.getcwd())
+
+
 @click.group()
 @click.version_option(__version__, '-V', '--version')
-def cli() -> None:
+@click.argument('worker-settings', required=True)
+@click.pass_context
+def cli(ctx: Context, worker_settings) -> None:
     """
     Job queues in python with asyncio and redis.
-    CLI to run the aiorq worker.
     """
+    ctx.ensure_object(dict)
+    ctx.obj["worker_settings"] = worker_settings
 
 
 @cli.command(help="Start a worker.")
-@click.argument('worker-settings', type=str, required=True)
 @click.option('--burst/--no-burst', default=None, help=burst_help)
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('--watch', type=click.Path(exists=True, dir_okay=True, file_okay=False), help=watch_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
 @click.pass_context
-def worker(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool):
+def worker(ctx: Context, burst: bool, check: bool, watch: str, verbose: bool):
     """
-    Job queues in python with asyncio and redis.
     CLI to run the aiorq worker.
     """
-    sys.path.append(os.getcwd())
-
+    worker_settings = ctx.obj["worker_settings"]
     worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings))  # <class 'tasks.WorkerSettings'>
     logging.config.dictConfig(default_log_config(verbose))
 
@@ -61,7 +67,21 @@ def worker(*, worker_settings: str, burst: bool, check: bool, watch: str, verbos
 @click.option("--host", default="127.0.0.1", show_default=True, help="Listen host.")
 @click.option("--port", default=8080, show_default=True, help="Listen port.")
 @click.pass_context
-def server(host: str, port: int):
+def server(ctx: Context, host: str, port: int):
+    """
+    CLI to run the aiorq server.
+    """
+    worker_settings_ = cast('WorkerSettingsType', import_string(ctx.obj["worker_settings"]))
+    app = create_app()
+
+    @app.on_event("startup")
+    async def startup():
+        app.state.redis = await create_pool(worker_settings_.redis_settings)
+
+    @app.on_event('shutdown')
+    async def shutdown():
+        await app.state.redis.close()
+
     uvicorn.run(app=app, host=host, port=port, debug=True)
 
 
@@ -89,7 +109,3 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
             loop.create_task(worker.async_run())
     finally:
         await worker.close()
-
-
-if __name__ == '__main__':
-    cli()
