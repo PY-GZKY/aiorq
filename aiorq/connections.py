@@ -15,12 +15,12 @@ from aioredis.exceptions import RedisError, WatchError
 from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
 
-from constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
+from .constants import default_queue_name, default_worker_name, job_key_prefix, result_key_prefix, worker_key, \
     health_check_key_suffix, func_key
-from jobs import Job
-from serialize import Deserializer, Serializer, deserialize_job, serialize_job, deserialize_func, deserialize_worker
-from specs import JobDef, JobResult
-from utils import timestamp_ms, to_ms, to_unix_ms, ms_to_datetime
+from .jobs import Job
+from .serialize import Deserializer, Serializer, deserialize_job, serialize_job, deserialize_func, deserialize_worker
+from .specs import JobDef, JobResult
+from .utils import timestamp_ms, to_ms, to_unix_ms, ms_to_datetime
 
 logger = logging.getLogger('aiorq.connections')
 
@@ -241,10 +241,8 @@ class AioRedis(Redis):  # type: ignore
         jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
         return await asyncio.gather(*[self._get_job_def(job_id, queue_name, int(score)) for job_id, score in jobs])
 
-
     async def redis_info(self) -> Dict[str, Any]:
         return await self.info()
-
 
 
 async def create_pool(

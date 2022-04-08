@@ -360,10 +360,8 @@ class Worker:
         async with self.sem:  # 在我们有空间运行作业之前,不要 zrangebyscore
             now = timestamp_ms()
             # 巧妙de用到了 zrangebyscore 属性，获取一组区间值，如果 执行时间（score）在此区间内才能取出任务job_ids
-            # print(f"获取到最大区间：{now}  数量：{count}")
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now)
-            # print(f"获取到一组 jobs: {job_ids}")
 
         # 任务开始工作
         await self.start_jobs(job_ids, worker_name)
@@ -427,7 +425,6 @@ class Worker:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
-                # print(f"任务将在 {score} 执行")
                 if ongoing_exists or not score:
                     # 作业已在其他位置开始,或已完成并从队列中移除
                     # 否则直接跳过 (防止重复执行)
@@ -436,7 +433,6 @@ class Worker:
                     continue
 
                 pipe.multi()
-                # print("任务开始了!~ 改变状态为正在运行中 !!")
                 pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
@@ -446,7 +442,6 @@ class Worker:
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
                 else:
                     # 调用创建 任务 并执行任务
-                    # print("调用创建 任务 并执行任务!~")
                     t = self.loop.create_task(self.run_job(job_id, score, worke_namer))
                     # 回调方法 释放锁
                     t.add_done_callback(lambda _: self.sem.release())
@@ -566,7 +561,6 @@ class Worker:
         finish = False
         timeout_s = self.job_timeout_s if function.timeout_s is None else function.timeout_s
         incr_score: Optional[int] = None
-        # print("合并上下文 ctx !~")
         job_ctx = {
             'job_id': job_id,
             'job_try': job_try,
@@ -579,7 +573,6 @@ class Worker:
         try:
             s = args_to_string(args, kwargs)
             extra = f' job_try={job_try}' if job_try > 1 else ''
-            # print(f"启动时间是: {start_ms} ")
             if (start_ms - score) > 1200:
                 extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
@@ -686,7 +679,6 @@ class Worker:
 
             if finish:
                 if result_data:
-                    # print(result_data)
                     expire = None if keep_result_forever else result_timeout_s
                     pipe.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]

@@ -2,9 +2,9 @@ import json
 import logging
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from exception import SerializationError, DeserializationError
-from specs import JobWorker, JobFunc, JobDef, JobResult
-from utils import ms_to_datetime
+from .exception import SerializationError, DeserializationError
+from .specs import JobWorker, JobFunc, JobDef, JobResult
+from .utils import ms_to_datetime
 
 logger = logging.getLogger('aiorq.serialize')
 

@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING, Any, List, Optional
 
-from specs import JobResult
-from utils import to_ms
+from .specs import JobResult
+from .utils import to_ms
 
 if TYPE_CHECKING:
-    from typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from .typing_ import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 
 class Retry(RuntimeError):

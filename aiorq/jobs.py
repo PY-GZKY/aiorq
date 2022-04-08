@@ -5,11 +5,11 @@ from typing import Any, Optional
 
 from aioredis import Redis
 
-from constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
-from exception import SerializationError
-from serialize import Deserializer, deserialize_job, deserialize_result
-from specs import JobStatus, JobDef, JobResult
-from utils import poll, timestamp_ms
+from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from .exception import SerializationError
+from .serialize import Deserializer, deserialize_job, deserialize_result
+from .specs import JobStatus, JobDef, JobResult
+from .utils import poll, timestamp_ms
 
 logger = logging.getLogger('aiorq.jobs')
 
