@@ -164,7 +164,7 @@ class Worker:
             self.functions.update({cj.name: cj for cj in self.cron_jobs})
 
         # 方法列表 > 0
-        assert self.functions, 'at least one function or cron_job must be registered'
+        assert len(self.functions) > 0, 'at least one function or cron_job must be registered'
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
@@ -853,13 +853,12 @@ async def async_check_health(
     redis: AioRedis = await create_pool(redis_settings)
     worker_name = worker_name or default_worker_name
     health_check_key = health_check_key or f'{health_check_key_suffix}{worker_name}'
-
     data = await redis.get(health_check_key)
     if not data:
         logger.warning('Health check failed: no health check sentinel value found')
         r = 1
     else:
-        logger.info('Health check successful: %s', data)
+        logger.info('Health check successful: %s', data.decode())
         r = 0
     await redis.close()
     return r
@@ -874,6 +873,5 @@ def check_health(settings_cls: 'WorkerSettingsType') -> int:
     cls_kwargs = get_kwargs(settings_cls)
     redis_settings = cast(Optional[RedisSettings], cls_kwargs.get('redis_settings'))
     health_check_key = cast(Optional[str], cls_kwargs.get('health_check_key'))
-    queue_name = cast(Optional[str], cls_kwargs.get('queue_name'))
     loop = asyncio.get_event_loop()
-    return loop.run_until_complete(async_check_health(redis_settings, health_check_key, queue_name))
+    return loop.run_until_complete(async_check_health(redis_settings, health_check_key))
