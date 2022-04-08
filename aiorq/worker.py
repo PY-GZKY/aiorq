@@ -241,7 +241,7 @@ class Worker:
             queue_name=self.queue_name,
             worker_name=worker_name,
             functions=list(self.functions.keys()),
-            enqueue_time=ms_to_datetime(timestamp_ms()),
+            enqueue_time=timestamp_ms(),
             is_action=True)
         worker_ = dataclasses.asdict(w_)
         await _pool.set(f'{worker_key}:{self.worker_name}', json.dumps(worker_))

@@ -22,16 +22,23 @@ health_check_help = 'Health Check: run a health check and exit.'
 watch_help = 'Watch a directory and reload the worker upon changes.'
 verbose_help = 'Enable verbose output.'
 
-
-@click.group('aiorq', context_settings={"help_option_names": ["-h", "--help"]})
+@click.group()
 @click.version_option(__version__, '-V', '--version')
+def cli() -> None:
+    """
+    Job queues in python with asyncio and redis.
+    CLI to run the aiorq worker.
+    """
+
+
+@cli.command(help="Start a worker.")
 @click.argument('worker-settings', type=str, required=True)
 @click.option('--burst/--no-burst', default=None, help=burst_help)
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('--watch', type=click.Path(exists=True, dir_okay=True, file_okay=False), help=watch_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
 @click.pass_context
-def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool) -> None:
+def worker(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool):
     """
     Job queues in python with asyncio and redis.
     CLI to run the aiorq worker.
@@ -50,7 +57,7 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
         run_worker(worker_settings_, **kwargs)
 
 
-@cli.command("server", help="Start a worker.")
+@cli.command(help="Start a server.")
 @click.option("--host", default="127.0.0.1", show_default=True, help="Listen host.")
 @click.option("--port", default=8080, show_default=True, help="Listen port.")
 @click.pass_context

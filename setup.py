@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from importlib.machinery import SourceFileLoader
-from setuptools import setup
+from setuptools import setup, find_packages
 
 description = 'Job queues in python with asyncio and redis'
 readme = Path(__file__).parent / 'README.md'
@@ -43,7 +43,7 @@ setup(
     author_email='341796767@qq.com',
     url='https://github.com/PY-GZKY/aiorq',
     license='MIT',
-    packages=['aiorq'],
+    packages=find_packages(),
     zip_safe=True,
     entry_points="""
         [console_scripts]
